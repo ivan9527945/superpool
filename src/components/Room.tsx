@@ -4,12 +4,62 @@
 // 「倒影裡的房間」只是拿另一個 seed 生成的同構空間。
 
 import * as THREE from 'three';
-import { useMemo } from 'react';
-import type { RoomSpec } from '@/core/room';
+import { useMemo, useRef } from 'react';
+import { useFrame } from '@react-three/fiber';
+import type { LightSpec, RoomSpec } from '@/core/room';
 import { makeTileTexture } from '@/core/textures';
 
 const TILE = 0.62;
 const BLACK = new THREE.Color('#000000');
+
+// 燈具:亮/死/閃爍。閃爍相位由燈的位置決定(決定論,鏡像分支自己閃自己的)
+function Fixture({
+  l,
+  height,
+  color,
+  withPoint,
+}: {
+  l: LightSpec;
+  height: number;
+  color: THREE.Color;
+  withPoint: boolean;
+}) {
+  const mat = useRef<THREE.MeshStandardMaterial>(null);
+  const point = useRef<THREE.PointLight>(null);
+  const phase = useMemo(() => ((l.x * 7.31 + l.z * 3.17) % 9.7) + 9.7, [l]);
+  useFrame(({ clock }) => {
+    if (!l.flicker) return;
+    const t = clock.elapsedTime + phase;
+    const f =
+      Math.sin(t * 13.7) * 0.5 + Math.sin(t * 7.3 + 1.7) * 0.35 + 0.55;
+    const v = f > 0.42 ? 1 : 0.07;
+    if (mat.current) mat.current.emissiveIntensity = 1.4 * v;
+    if (point.current) point.current.intensity = 34 * v;
+  });
+  return (
+    <group position={[l.x, 0, l.z]}>
+      <mesh position={[0, height - 0.05, 0]}>
+        <boxGeometry args={[1.25, 0.09, 0.48]} />
+        <meshStandardMaterial
+          ref={mat}
+          color={l.on ? '#e8e2cf' : '#262a25'}
+          emissive={l.on ? color : BLACK}
+          emissiveIntensity={l.on ? 1.4 : 0}
+        />
+      </mesh>
+      {withPoint && (
+        <pointLight
+          ref={point}
+          position={[0, height - 0.6, 0]}
+          intensity={34}
+          distance={18}
+          decay={1.7}
+          color={color}
+        />
+      )}
+    </group>
+  );
+}
 
 function Tiled(props: {
   base: THREE.Texture;
@@ -61,7 +111,10 @@ export default function Room({
   const px1 = pool.x + pool.w / 2;
   const pz0 = pool.z - pool.d / 2;
   const pz1 = pool.z + pool.d / 2;
-  const litLights = useMemo(() => spec.lights.filter((l) => l.on).slice(0, 3), [spec]);
+  const litSet = useMemo(
+    () => new Set(spec.lights.filter((l) => l.on).slice(0, 3)),
+    [spec],
+  );
 
   return (
     <group>
@@ -105,20 +158,10 @@ export default function Room({
         <meshStandardMaterial color={cols.ceil} roughness={0.9} />
       </mesh>
 
-      {/* 燈具:亮/死由 seed + D 決定 */}
+      {/* 燈具:亮/死/閃爍由 seed + D 決定;前三盞亮燈掛真實點光源 */}
       {spec.lights.map((l, i) => (
-        <mesh key={i} position={[l.x, height - 0.05, l.z]}>
-          <boxGeometry args={[1.25, 0.09, 0.48]} />
-          <meshStandardMaterial
-            color={l.on ? '#e8e2cf' : '#262a25'}
-            emissive={l.on ? cols.lightOn : BLACK}
-            emissiveIntensity={l.on ? 1.4 : 0}
-          />
-        </mesh>
-      ))}
-      {litLights.map((l, i) => (
-        <pointLight key={i} position={[l.x, height - 0.6, l.z]}
-          intensity={34} distance={18} decay={1.7} color={cols.lightOn} />
+        <Fixture key={i} l={l} height={height} color={cols.lightOn}
+          withPoint={litSet.has(l)} />
       ))}
 
       {/* 池邊柱 */}
@@ -157,6 +200,20 @@ export default function Room({
         </group>
       ))}
 
+      {/* 不該有的門:側牆上的黑洞。沒有光、沒有框、沒有去處 */}
+      {spec.fakeDoors.map((f, i) => (
+        <group
+          key={i}
+          position={[f.wall === 'east' ? width / 2 : -width / 2, 0, f.z]}
+          rotation={[0, f.wall === 'east' ? -Math.PI / 2 : Math.PI / 2, 0]}
+        >
+          <mesh position={[0, 1.05, 0.03]}>
+            <planeGeometry args={[1.0, 2.1]} />
+            <meshBasicMaterial color="#020202" />
+          </mesh>
+        </group>
+      ))}
+
       {/* 身影:靜止的黑色剪影 — 它不追、不動;威脅只是「它在」 */}
       {spec.figure && (
         <group position={[spec.figure.x, 0, spec.figure.z]} rotation={[0.02, 0.15, 0.03]}>
@@ -172,29 +229,66 @@ export default function Room({
       )}
 
       {/* 道具 */}
-      {spec.props.map((p, i) =>
-        p.kind === 'chair' ? (
-          <group key={i} position={[p.x, 0, p.z]} rotation={[0, p.rotY, 0]}>
-            <mesh position={[0, 0.42, 0]}>
-              <boxGeometry args={[0.5, 0.06, 0.5]} />
-              <meshStandardMaterial color="#e6e3da" roughness={0.35} />
-            </mesh>
-            <mesh position={[0, 0.72, -0.24]}>
-              <boxGeometry args={[0.5, 0.7, 0.06]} />
-              <meshStandardMaterial color="#e6e3da" roughness={0.35} />
-            </mesh>
-            <mesh position={[0, 0.2, 0]}>
-              <boxGeometry args={[0.44, 0.4, 0.44]} />
-              <meshStandardMaterial color="#cfccc2" roughness={0.5} />
-            </mesh>
-          </group>
-        ) : (
+      {spec.props.map((p, i) => {
+        if (p.kind === 'chair') {
+          return (
+            <group key={i} position={[p.x, 0, p.z]} rotation={[0, p.rotY, 0]}>
+              <mesh position={[0, 0.42, 0]}>
+                <boxGeometry args={[0.5, 0.06, 0.5]} />
+                <meshStandardMaterial color="#e6e3da" roughness={0.35} />
+              </mesh>
+              <mesh position={[0, 0.72, -0.24]}>
+                <boxGeometry args={[0.5, 0.7, 0.06]} />
+                <meshStandardMaterial color="#e6e3da" roughness={0.35} />
+              </mesh>
+              <mesh position={[0, 0.2, 0]}>
+                <boxGeometry args={[0.44, 0.4, 0.44]} />
+                <meshStandardMaterial color="#cfccc2" roughness={0.5} />
+              </mesh>
+            </group>
+          );
+        }
+        if (p.kind === 'bench') {
+          return (
+            <group key={i} position={[p.x, 0, p.z]} rotation={[0, p.rotY, 0]}>
+              <mesh position={[0, 0.42, 0]}>
+                <boxGeometry args={[1.8, 0.07, 0.36]} />
+                <meshStandardMaterial color="#9a8f78" roughness={0.7} />
+              </mesh>
+              <mesh position={[-0.7, 0.2, 0]}>
+                <boxGeometry args={[0.08, 0.4, 0.32]} />
+                <meshStandardMaterial color="#6f6a5c" roughness={0.8} />
+              </mesh>
+              <mesh position={[0.7, 0.2, 0]}>
+                <boxGeometry args={[0.08, 0.4, 0.32]} />
+                <meshStandardMaterial color="#6f6a5c" roughness={0.8} />
+              </mesh>
+            </group>
+          );
+        }
+        if (p.kind === 'locker') {
+          return (
+            <group key={i} position={[p.x, 0, p.z]} rotation={[0, p.rotY, 0]}>
+              {[-0.62, 0, 0.62].map((ox) => (
+                <mesh key={ox} position={[ox, 0.95, 0]}>
+                  <boxGeometry args={[0.58, 1.9, 0.45]} />
+                  <meshStandardMaterial
+                    color="#5f7a6e"
+                    roughness={0.45}
+                    metalness={0.35}
+                  />
+                </mesh>
+              ))}
+            </group>
+          );
+        }
+        return (
           <mesh key={i} position={[p.x, 0.06, p.z]} rotation={[-Math.PI / 2, 0, p.rotY]}>
             <torusGeometry args={[0.42, 0.11, 10, 24]} />
             <meshStandardMaterial color="#8a4038" roughness={0.6} />
           </mesh>
-        ),
-      )}
+        );
+      })}
 
       {/* 鏡像分支自己的水面:死寂的暗色靜水(它的宇宙沒有你攪動它) */}
       {variant === 'mirror' && (

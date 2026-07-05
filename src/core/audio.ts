@@ -8,6 +8,7 @@ let humFilter: BiquadFilterNode | null = null;
 let feedback: GainNode | null = null;
 let delayIn: DelayNode | null = null;
 let noiseBuf: AudioBuffer | null = null;
+let lfoDepth: GainNode | null = null;
 let currentD = 0;
 
 export function startAudio(): void {
@@ -48,6 +49,16 @@ export function startAudio(): void {
   g3.connect(humGain);
   humGain.connect(humFilter);
   humFilter.connect(master);
+
+  // ─ 呼吸 LFO:嗡鳴音量的緩慢起伏,深度綁 D(離家越遠越不穩定)
+  const lfo = ctx.createOscillator();
+  lfo.type = 'sine';
+  lfo.frequency.value = 0.13;
+  lfoDepth = ctx.createGain();
+  lfoDepth.gain.value = 0;
+  lfo.connect(lfoDepth);
+  lfoDepth.connect(humGain.gain);
+  lfo.start();
 
   // ─ 迴授延遲當殘響:feedback 量綁 D(殘響變長 = 離家更遠)
   delayIn = ctx.createDelay(1);
@@ -94,6 +105,7 @@ function applyDivergence(): void {
   detuneOsc.detune.setTargetAtTime(6 + currentD * 95, t, 0.8);
   feedback.gain.setTargetAtTime(Math.min(0.72, 0.25 + currentD * 0.45), t, 0.8);
   humFilter.frequency.setTargetAtTime(420 - currentD * 170, t, 0.8);
+  lfoDepth?.gain.setTargetAtTime(currentD * 0.07, t, 1.2);
 }
 
 export function setAudioDivergence(d: number): void {
@@ -101,13 +113,16 @@ export function setAudioDivergence(d: number): void {
   applyDivergence();
 }
 
-// ─ 水滴:偶發、帶回音;音高隨 D 往下掉
+// ─ 水滴:偶發、帶回音;音高隨 D 往下掉,頻率隨 D 變密(濕區的體感)
 function scheduleDrip(): void {
   if (!ctx) return;
-  window.setTimeout(() => {
-    drip();
-    scheduleDrip();
-  }, 2500 + Math.random() * 6500);
+  window.setTimeout(
+    () => {
+      drip();
+      scheduleDrip();
+    },
+    1400 + Math.random() * 7000 * (1 - currentD * 0.6),
+  );
 }
 
 function drip(): void {

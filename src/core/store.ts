@@ -19,10 +19,19 @@ interface SuperpoolState {
   traverse: (doorIndex: number, dDelta: number) => void;
 }
 
+/** debug:?d=0.6 直接跳到任意分岔度(client-only,SSR 拿預設值) */
+function initialD(): number {
+  if (typeof window === 'undefined') return 0.08;
+  const v = parseFloat(
+    new URLSearchParams(window.location.search).get('d') ?? '',
+  );
+  return Number.isFinite(v) ? clamp01(v) : 0.08;
+}
+
 export const useStore = create<SuperpoolState>((set) => ({
   started: false,
   branchId: ROOT_BRANCH,
-  D: 0.08,
+  D: initialD(),
   path: [],
   travelNonce: 0,
   start: () => set({ started: true }),

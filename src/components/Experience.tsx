@@ -47,7 +47,15 @@ export default function Experience() {
         gl={{ antialias: true, powerPreference: 'high-performance' }}
       >
         <color attach="background" args={[fogColor]} />
-        <fog attach="fog" args={[fogColor, 3, 30 - D * 12]} />
+        {/* 濕區的霧更近更濃:蒸氣間的體感 */}
+        <fog
+          attach="fog"
+          args={[
+            fogColor,
+            spec.biome === 'wetzone' ? 1.6 : 3,
+            (spec.biome === 'wetzone' ? 21 : 30) - D * 11,
+          ]}
+        />
         <Room spec={spec} />
         <Pool spec={spec} mirrorSpec={mirror} D={D} fogColor={fogColor} />
         {started && <Player spec={spec} />}

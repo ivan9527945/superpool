@@ -79,8 +79,14 @@ export default function Pool({
   const mirrorScene = useMemo(() => new THREE.Scene(), []);
   useEffect(() => {
     mirrorScene.background = fogColor.clone().multiplyScalar(0.55);
-    mirrorScene.fog = new THREE.Fog(fogColor.clone().multiplyScalar(0.7), 3, 24);
-  }, [mirrorScene, fogColor]);
+    // 倒影分支的霧跟它自己的 biome:水裡可能已經是濕區,而你站的還是池核
+    const wet = mirrorSpec.biome === 'wetzone';
+    mirrorScene.fog = new THREE.Fog(
+      fogColor.clone().multiplyScalar(0.7),
+      wet ? 1.6 : 3,
+      wet ? 17 : 24,
+    );
+  }, [mirrorScene, fogColor, mirrorSpec.biome]);
 
   const virtualCamera = useMemo(() => new THREE.PerspectiveCamera(), []);
   const uTextureMatrix = useMemo(() => new THREE.Matrix4(), []);

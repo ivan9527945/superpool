@@ -12,11 +12,14 @@ import {
   ChromaticAberration,
   Scanline,
   Vignette,
+  Bloom,
 } from '@react-three/postprocessing';
 import { BlendFunction } from 'postprocessing';
 import { useStore } from '@/core/store';
 
 export default function Effects() {
+  // D 只在穿門時變,re-render 成本可接受;Bloom 強度 = 濕氣讓燈暈開(鏡頭起霧)
+  const D = useStore((s) => s.D);
   const chroma = useRef<any>(null);
   const noise = useRef<any>(null);
   const flash = useRef(0);
@@ -45,6 +48,12 @@ export default function Effects() {
 
   return (
     <EffectComposer>
+      <Bloom
+        intensity={0.12 + D * 0.75}
+        luminanceThreshold={0.55}
+        luminanceSmoothing={0.25}
+        mipmapBlur
+      />
       {/* callback ref:wrapEffect 會 JSON.stringify 剩餘 props(React 19 含 ref),
           object ref 掛載後帶循環引用會爆;函數會被 stringify 忽略 */}
       <Noise
