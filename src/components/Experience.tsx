@@ -10,7 +10,11 @@ import { Canvas } from '@react-three/fiber';
 import { useStore } from '@/core/store';
 import { generateRoomSpec } from '@/core/room';
 import { mirrorSeed, clamp01 } from '@/core/prng';
-import { setAudioDivergence } from '@/core/audio';
+import {
+  setAudioDivergence,
+  setDoorVoices,
+  setFigureState,
+} from '@/core/audio';
 import Room from './Room';
 import Pool from './Pool';
 import Player from './Player';
@@ -23,10 +27,13 @@ export default function Experience() {
   const started = useStore((s) => s.started);
 
   const spec = useMemo(() => generateRoomSpec(branchId, D), [branchId, D]);
+  // 倒影分支:身影在水裡是實心的(那是它的世界)。
+  // D > 0.75 反轉:水裡的它消失 — 它已經滲透過來了。
   const mirror = useMemo(
     () =>
       generateRoomSpec(mirrorSeed(branchId), clamp01(D + 0.1), {
-        figureChance: 0.22 + D * 0.5,
+        figureChance: D > 0.75 ? 0 : 0.22 + D * 0.5,
+        figureMode: 'solid',
       }),
     [branchId, D],
   );
@@ -38,6 +45,19 @@ export default function Experience() {
   useEffect(() => {
     setAudioDivergence(D);
   }, [D]);
+
+  // 房間就緒(且音訊已啟動)後:掛上各門的水聲、通報身影存在
+  useEffect(() => {
+    if (!started) return;
+    setDoorVoices(
+      spec.doors.map((d) => ({
+        x: d.x,
+        z: -spec.depth / 2,
+        t: clamp01((d.dDelta + 0.07) / 0.22),
+      })),
+    );
+    setFigureState(!!spec.figure, false);
+  }, [spec, started]);
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#000' }}>

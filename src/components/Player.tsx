@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import { useEffect, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useStore } from '@/core/store';
-import { pulseTraverse } from '@/core/audio';
+import { pulseTraverse, updateListener, setFigureState } from '@/core/audio';
 import { spawnPoint, type RoomSpec } from '@/core/room';
 
 const EYE = 1.6;
@@ -21,6 +21,7 @@ export default function Player({ spec }: { spec: RoomSpec }) {
   const pitch = useRef(0);
   const bob = useRef(0);
   const keys = useRef<Record<string, boolean>>({});
+  const nearFigure = useRef(false);
 
   useEffect(() => {
     camera.rotation.order = 'YXZ';
@@ -85,6 +86,7 @@ export default function Player({ spec }: { spec: RoomSpec }) {
 
     if (lastSeed.current !== spec.seed) {
       lastSeed.current = spec.seed;
+      nearFigure.current = false;
       const s = spawnPoint(spec);
       pos.current.set(s.x, EYE, s.z);
     }
@@ -127,6 +129,22 @@ export default function Player({ spec }: { spec: RoomSpec }) {
       p.z,
     );
     camera.rotation.set(pitch.current, yaw.current, 0);
+
+    // 空間音:各門水聲的音量/聲像跟著位置與朝向
+    updateListener(p.x, p.z, yaw.current);
+
+    // 身影接近偵測(hysteresis 避免邊界抖動):走近它 → 聲場退開
+    if (spec.figure) {
+      const df = Math.hypot(p.x - spec.figure.x, p.z - spec.figure.z);
+      const wasNear = nearFigure.current;
+      if (!wasNear && df < 3) {
+        nearFigure.current = true;
+        setFigureState(true, true);
+      } else if (wasNear && df > 3.6) {
+        nearFigure.current = false;
+        setFigureState(true, false);
+      }
+    }
 
     // 門的觸發:走到遠牆上的門口 = 穿進新的分支
     for (const d of spec.doors) {

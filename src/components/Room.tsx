@@ -6,11 +6,67 @@
 import * as THREE from 'three';
 import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
-import type { LightSpec, RoomSpec } from '@/core/room';
+import type { FigureSpec, LightSpec, RoomSpec } from '@/core/room';
 import { makeTileTexture } from '@/core/textures';
 
 const TILE = 0.62;
 const BLACK = new THREE.Color('#000000');
+
+// 身影:靜止的黑色剪影。它不追、不動 — 但永遠面向你。
+// phase 模式 = 滲入中的殘影:半透明、低頻不規則地忽隱忽現,
+// 而且你的視線越正對它越淡(眼角餘光效應),轉頭直視 → 幾乎不在。
+function Figure({ f, seed }: { f: FigureSpec; seed: number }) {
+  const group = useRef<THREE.Group>(null);
+  const mat = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        color: '#020202',
+        roughness: 0.98,
+        transparent: f.mode === 'phase',
+        opacity: f.mode === 'phase' ? 0 : 1,
+      }),
+    [f.mode],
+  );
+  const phase = useMemo(() => (seed % 997) * 0.37, [seed]);
+  const tmp = useMemo(
+    () => ({ dir: new THREE.Vector3(), toF: new THREE.Vector3() }),
+    [],
+  );
+  useFrame(({ camera, clock }) => {
+    const g = group.current;
+    if (!g) return;
+    // 水平鏡射不改 x/z,面向主相機 = 也面向倒影裡的虛擬相機
+    g.rotation.y = Math.atan2(
+      camera.position.x - f.x,
+      camera.position.z - f.z,
+    );
+    if (f.mode !== 'phase') return;
+    const t = clock.elapsedTime + phase;
+    const flutter = Math.max(
+      0,
+      Math.sin(t * 0.7) * 0.5 + Math.sin(t * 2.3 + 1.1) * 0.3 + 0.25,
+    );
+    camera.getWorldDirection(tmp.dir);
+    tmp.toF
+      .set(f.x - camera.position.x, 0, f.z - camera.position.z)
+      .normalize();
+    const facing = Math.max(
+      0,
+      tmp.dir.x * tmp.toF.x + tmp.dir.z * tmp.toF.z,
+    );
+    mat.opacity = 0.42 * flutter * (1 - facing * 0.85);
+  });
+  return (
+    <group ref={group} position={[f.x, 0, f.z]}>
+      <mesh position={[0, 0.62, 0]} material={mat}>
+        <cylinderGeometry args={[0.13, 0.2, 1.24, 10]} />
+      </mesh>
+      <mesh position={[0, 1.36, 0]} material={mat}>
+        <sphereGeometry args={[0.135, 12, 10]} />
+      </mesh>
+    </group>
+  );
+}
 
 // 燈具:亮/死/閃爍。閃爍相位由燈的位置決定(決定論,鏡像分支自己閃自己的)
 function Fixture({
@@ -214,19 +270,8 @@ export default function Room({
         </group>
       ))}
 
-      {/* 身影:靜止的黑色剪影 — 它不追、不動;威脅只是「它在」 */}
-      {spec.figure && (
-        <group position={[spec.figure.x, 0, spec.figure.z]} rotation={[0.02, 0.15, 0.03]}>
-          <mesh position={[0, 0.62, 0]}>
-            <cylinderGeometry args={[0.13, 0.2, 1.24, 10]} />
-            <meshStandardMaterial color="#020202" roughness={0.98} />
-          </mesh>
-          <mesh position={[0, 1.36, 0]}>
-            <sphereGeometry args={[0.135, 12, 10]} />
-            <meshStandardMaterial color="#020202" roughness={0.98} />
-          </mesh>
-        </group>
-      )}
+      {/* 身影 */}
+      {spec.figure && <Figure f={spec.figure} seed={spec.seed} />}
 
       {/* 道具 */}
       {spec.props.map((p, i) => {

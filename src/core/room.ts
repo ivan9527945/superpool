@@ -43,6 +43,13 @@ export interface PropSpec {
   rotY: number;
 }
 
+export interface FigureSpec {
+  x: number;
+  z: number;
+  /** phase = 半存在的殘影(滲入中);solid = 它已經過來了 */
+  mode: 'solid' | 'phase';
+}
+
 export interface RoomSpec {
   seed: number;
   biome: Biome;
@@ -57,7 +64,7 @@ export interface RoomSpec {
   props: PropSpec[];
   doors: DoorSpec[];
   fakeDoors: FakeDoorSpec[];
-  figure: { x: number; z: number } | null;
+  figure: FigureSpec | null;
   /** 調色盤漂移量:0 = 池核青綠,1 = 後室黃 */
   blend: number;
 }
@@ -73,7 +80,7 @@ export function cueColor(dDelta: number): string {
 export function generateRoomSpec(
   seed: number,
   D: number,
-  opts: { figureChance?: number } = {},
+  opts: { figureChance?: number; figureMode?: 'solid' | 'phase' } = {},
 ): RoomSpec {
   const rng = mulberry32(seed);
 
@@ -212,18 +219,26 @@ export function generateRoomSpec(
     }
   }
 
-  // 身影:固定抽取三個 roll,再依 chance 決定是否存在(保持 draw 順序穩定)
+  // 身影:固定抽取三個 roll,再依 chance 決定是否存在(保持 draw 順序穩定)。
+  // 滲入現實的梯度:D 低 → 只有殘影(phase)遠遠站在角落;
+  // D 高 → 實心(solid),而且生成位置沿著牆逐步逼近你這一側。
   const figSide = rng() < 0.5 ? -1 : 1;
   const figZroll = rng();
   const figRoll = rng();
-  const figureChance = opts.figureChance ?? Math.max(0, D - 0.35) * 0.9;
-  const figure =
-    figRoll < figureChance
-      ? {
-          x: figSide * (width / 2 - 1.3),
-          z: -depth / 2 + 1.6 + figZroll * 2.5,
-        }
-      : null;
+  const figureChance = opts.figureChance ?? clamp01((D - 0.38) * 1.4);
+  let figure: FigureSpec | null = null;
+  if (figRoll < figureChance) {
+    const cornerZ = -depth / 2 + 1.6 + figZroll * 2.5;
+    const approach = clamp01((D - 0.5) * 1.2) * 0.65;
+    const mode =
+      opts.figureMode ??
+      (D + (figZroll - 0.5) * 0.06 >= 0.72 ? 'solid' : 'phase');
+    figure = {
+      x: figSide * (width / 2 - 1.3),
+      z: cornerZ + (depth * 0.1 - cornerZ) * approach,
+      mode,
+    };
+  }
 
   const blend = clamp01(
     D * 0.9 + (biome === 'wetzone' ? 0.12 : 0) + (rng() - 0.5) * 0.12,

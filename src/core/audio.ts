@@ -9,7 +9,20 @@ let feedback: GainNode | null = null;
 let delayIn: DelayNode | null = null;
 let noiseBuf: AudioBuffer | null = null;
 let lfoDepth: GainNode | null = null;
+let humGain: GainNode | null = null;
+let toneGain: GainNode | null = null;
 let currentD = 0;
+let figurePresent = false;
+
+interface DoorVoice {
+  src: AudioBufferSourceNode;
+  lfo: OscillatorNode;
+  gain: GainNode;
+  pan: StereoPannerNode;
+  x: number;
+  z: number;
+}
+let doorVoices: DoorVoice[] = [];
 
 export function startAudio(): void {
   if (ctx) return;
@@ -26,7 +39,7 @@ export function startAudio(): void {
   master.gain.linearRampToValueAtTime(0.5, ctx.currentTime + 2.5);
 
   // ─ 嗡鳴:三個諧波,第二個綁 detune
-  const humGain = ctx.createGain();
+  humGain = ctx.createGain();
   humGain.gain.value = 0.16;
   const o1 = ctx.createOscillator();
   o1.type = 'sine';
@@ -84,11 +97,11 @@ export function startAudio(): void {
   const nf = ctx.createBiquadFilter();
   nf.type = 'lowpass';
   nf.frequency.value = 260;
-  const ng = ctx.createGain();
-  ng.gain.value = 0.02;
+  toneGain = ctx.createGain();
+  toneGain.gain.value = 0.02;
   noise.connect(nf);
-  nf.connect(ng);
-  ng.connect(master);
+  nf.connect(toneGain);
+  toneGain.connect(master);
 
   o1.start();
   o2.start();
@@ -113,7 +126,8 @@ export function setAudioDivergence(d: number): void {
   applyDivergence();
 }
 
-// ─ 水滴:偶發、帶回音;音高隨 D 往下掉,頻率隨 D 變密(濕區的體感)
+// ─ 水滴:偶發、帶回音;音高隨 D 往下掉,頻率隨 D 變密(濕區的體感)。
+// 身影在現實中時水滴變稀 — 世界屏息。
 function scheduleDrip(): void {
   if (!ctx) return;
   window.setTimeout(
@@ -121,7 +135,8 @@ function scheduleDrip(): void {
       drip();
       scheduleDrip();
     },
-    1400 + Math.random() * 7000 * (1 - currentD * 0.6),
+    (1400 + Math.random() * 7000 * (1 - currentD * 0.6)) *
+      (figurePresent ? 1.9 : 1),
   );
 }
 
@@ -142,6 +157,77 @@ function drip(): void {
   g.connect(delayIn);
   o.start(t);
   o.stop(t + 0.6);
+}
+
+// ─ 空間音:每道門後傳來水聲,音高編碼分岔預覽(t=0 相干清亮,t=1 發散低濁),
+//   音量隨距離、聲像隨方位。這是「可學習的線索語言」的聲音層。
+export function setDoorVoices(
+  doors: { x: number; z: number; t: number }[],
+): void {
+  if (!ctx || !master || !noiseBuf) return;
+  for (const v of doorVoices) {
+    try {
+      v.src.stop();
+      v.lfo.stop();
+    } catch {
+      // 已停止
+    }
+    v.pan.disconnect();
+  }
+  doorVoices = [];
+  for (const d of doors) {
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuf;
+    src.loop = true;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.Q.value = 7;
+    filter.frequency.value = 1600 - d.t * 1000;
+    const lfo = ctx.createOscillator();
+    lfo.frequency.value = 0.4 + d.t * 0.7;
+    const lfoGain = ctx.createGain();
+    lfoGain.gain.value = 30 + d.t * 70;
+    lfo.connect(lfoGain);
+    lfoGain.connect(filter.frequency);
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    const pan = ctx.createStereoPanner();
+    src.connect(filter);
+    filter.connect(gain);
+    gain.connect(pan);
+    pan.connect(master);
+    src.start();
+    lfo.start();
+    doorVoices.push({ src, lfo, gain, pan, x: d.x, z: d.z });
+  }
+}
+
+/** 每 frame 由 Player 呼叫:依玩家位置與朝向更新各門水聲的音量與聲像 */
+export function updateListener(px: number, pz: number, yaw: number): void {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  const fx = -Math.sin(yaw);
+  const fz = -Math.cos(yaw);
+  for (const v of doorVoices) {
+    const dx = v.x - px;
+    const dz = v.z - pz;
+    const dist = Math.hypot(dx, dz);
+    const g = Math.max(0, 1 - dist / 7);
+    v.gain.gain.setTargetAtTime(g * g * 0.12, t, 0.08);
+    if (dist > 0.001) {
+      const cross = (fx * dz - fz * dx) / dist;
+      v.pan.pan.setTargetAtTime(Math.max(-1, Math.min(1, cross)), t, 0.08);
+    }
+  }
+}
+
+/** 身影狀態:在現實中 → 房間音變厚、水滴變稀;走近它 → 嗡鳴退開 */
+export function setFigureState(present: boolean, near: boolean): void {
+  figurePresent = present;
+  if (!ctx || !toneGain || !humGain) return;
+  const t = ctx.currentTime;
+  toneGain.gain.setTargetAtTime(present ? 0.05 : 0.02, t, 1.0);
+  humGain.gain.setTargetAtTime(near ? 0.1 : 0.16, t, 0.4);
 }
 
 /** 穿門瞬間:一聲噪音掃頻 + 主音量短暫下沉(世界被抽換的體感) */

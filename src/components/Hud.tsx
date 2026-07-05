@@ -13,11 +13,13 @@ export default function Hud() {
   const travelNonce = useStore((s) => s.travelNonce);
   const [clock, setClock] = useState('03:33:00');
   const t0 = useRef<number | null>(null);
+  const glitching = useRef(false);
 
   useEffect(() => {
     if (!started) return;
     if (t0.current == null) t0.current = performance.now();
     const id = setInterval(() => {
+      if (glitching.current) return;
       const el = (performance.now() - (t0.current ?? 0)) / 1000;
       const total =
         Math.floor(3 * 3600 + 33 * 60 + el + travelNonce * 137) % 86400;
@@ -30,6 +32,31 @@ export default function Hud() {
     }, 250);
     return () => clearInterval(id);
   }, [started, travelNonce]);
+
+  // 穿門瞬間:時間戳短暫亂碼 — 這卷帶子被剪接過
+  useEffect(() => {
+    if (travelNonce === 0) return;
+    glitching.current = true;
+    const CHARS = '0123456789▓█░:';
+    const scramble = setInterval(() => {
+      setClock(
+        Array.from({ length: 8 }, (_, i) =>
+          i === 2 || i === 5
+            ? ':'
+            : CHARS[Math.floor(Math.random() * CHARS.length)],
+        ).join(''),
+      );
+    }, 70);
+    const stop = setTimeout(() => {
+      clearInterval(scramble);
+      glitching.current = false;
+    }, 480);
+    return () => {
+      clearInterval(scramble);
+      clearTimeout(stop);
+      glitching.current = false;
+    };
+  }, [travelNonce]);
 
   const bars = Math.round((1 - D) * 12);
   const tracking = '█'.repeat(bars) + '░'.repeat(12 - bars);
