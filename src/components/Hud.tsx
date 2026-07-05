@@ -7,10 +7,51 @@ import { useEffect, useRef, useState } from 'react';
 import { useStore } from '@/core/store';
 import { startAudio } from '@/core/audio';
 
+// 揭露:D 歸零時,遊戲不說「你回家了」
+const LUCID_LINES = [
+  '訊號穩定。分岔度歸零。',
+  '這裡幾乎就是你出發的地方。幾乎。',
+  '你數過天花板的燈嗎。',
+  '沒有任何一個分支是特權的。',
+  '家,從來不是一個座標。',
+];
+
 export default function Hud() {
   const started = useStore((s) => s.started);
   const D = useStore((s) => s.D);
   const travelNonce = useStore((s) => s.travelNonce);
+  const phase = useStore((s) => s.phase);
+  const [lucidLine, setLucidLine] = useState(-1);
+  const [scramble, setScramble] = useState('');
+
+  // lucid:字幕逐行浮現
+  useEffect(() => {
+    if (phase !== 'lucid') {
+      setLucidLine(-1);
+      return;
+    }
+    setLucidLine(0);
+    const id = setInterval(
+      () => setLucidLine((i) => Math.min(i + 1, LUCID_LINES.length - 1)),
+      3000,
+    );
+    return () => clearInterval(id);
+  }, [phase]);
+
+  // super:TRACKING 讀數失效 — 所有狀態同時為真
+  useEffect(() => {
+    if (phase !== 'super') return;
+    const CH = '█▓▒░ ';
+    const id = setInterval(() => {
+      setScramble(
+        Array.from(
+          { length: 12 },
+          () => CH[Math.floor(Math.random() * CH.length)],
+        ).join(''),
+      );
+    }, 110);
+    return () => clearInterval(id);
+  }, [phase]);
   const [clock, setClock] = useState('03:33:00');
   const t0 = useRef<number | null>(null);
   const glitching = useRef(false);
@@ -59,7 +100,11 @@ export default function Hud() {
   }, [travelNonce]);
 
   const bars = Math.round((1 - D) * 12);
-  const tracking = '█'.repeat(bars) + '░'.repeat(12 - bars);
+  const tracking =
+    phase === 'super'
+      ? scramble
+      : '█'.repeat(bars) + '░'.repeat(12 - bars);
+  const trackingLabel = phase === 'lucid' ? 'NO ORIGIN' : 'TRACKING';
 
   return (
     <div
@@ -103,8 +148,63 @@ export default function Hud() {
               opacity: 0.85,
             }}
           >
-            TRACKING {tracking}
+            {trackingLabel} {tracking}
           </div>
+          {phase === 'lucid' && lucidLine >= 0 && (
+            <div
+              key={lucidLine}
+              className="lucid-line"
+              style={{
+                position: 'absolute',
+                bottom: 90,
+                width: '100%',
+                textAlign: 'center',
+                fontSize: 16,
+                letterSpacing: 4,
+                textShadow: '0 0 10px rgba(120,255,220,0.5)',
+              }}
+            >
+              {LUCID_LINES[lucidLine]}
+            </div>
+          )}
+          {phase === 'end' && (
+            <div
+              className="end-fade"
+              onClick={() => window.location.assign(window.location.pathname)}
+              style={{
+                position: 'absolute',
+                inset: 0,
+                background: '#000',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                pointerEvents: 'auto',
+                cursor: 'pointer',
+              }}
+            >
+              <div
+                className="end-quote"
+                style={{ fontSize: 20, letterSpacing: 6, lineHeight: 2.2, textAlign: 'center', padding: '0 24px' }}
+              >
+                不知周之夢為胡蝶與,
+                <br />
+                胡蝶之夢為周與?
+              </div>
+              <div
+                className="end-quote"
+                style={{ fontSize: 12, letterSpacing: 4, opacity: 0.55, marginTop: 26 }}
+              >
+                —《莊子・齊物論》
+              </div>
+              <div
+                className="end-hint"
+                style={{ fontSize: 11, letterSpacing: 3, opacity: 0.35, marginTop: 70 }}
+              >
+                點擊,再作一次夢
+              </div>
+            </div>
+          )}
           <div
             className="hint-fade"
             style={{

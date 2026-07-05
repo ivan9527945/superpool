@@ -35,3 +35,42 @@ canvas {
     opacity: 0;
   }
 }
+
+.lucid-line {
+  opacity: 0;
+  animation: lucid-in 1.2s ease forwards;
+}
+
+@keyframes lucid-in {
+  to {
+    opacity: 0.92;
+  }
+}
+
+/* 收束:先沉入黑,句子才浮上來 */
+.end-fade {
+  opacity: 0;
+  animation: end-in 4s ease forwards;
+}
+
+@keyframes end-in {
+  to {
+    opacity: 1;
+  }
+}
+
+.end-quote {
+  opacity: 0;
+  animation: end-in 3s ease 3.5s forwards;
+}
+
+.end-hint {
+  opacity: 0;
+  animation: end-hint-in 2s ease 8s forwards;
+}
+
+@keyframes end-hint-in {
+  to {
+    opacity: 0.35;
+  }
+}

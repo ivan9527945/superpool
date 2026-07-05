@@ -69,16 +69,24 @@ export default function Effects() {
     flash.current = Math.max(0, flash.current - dt * 2.4);
     const D = s.D;
     const f = flash.current;
+    // 疊加態:色差開始緩慢呼吸(影像本身也在幾個版本之間漂移);收束後歸於安靜
+    const wobble =
+      s.phase === 'super'
+        ? (Math.sin(clock.elapsedTime * 0.7) * 0.5 + 0.5) * 0.004
+        : 0;
+    const calm = s.phase === 'end' ? 0.25 : 1;
     tracking.uniforms.get('uTime')!.value = clock.elapsedTime;
-    tracking.uniforms.get('uIntensity')!.value = 0.12 + D * 0.5 + f * 1.6;
+    tracking.uniforms.get('uIntensity')!.value =
+      (0.12 + D * 0.5 + f * 1.6 + (s.phase === 'super' ? 0.3 : 0)) * calm;
     if (chroma.current?.offset) {
       chroma.current.offset.set(
-        0.0008 + D * 0.0022 + f * 0.005,
-        0.0004 + D * 0.001 + f * 0.002,
+        (0.0008 + D * 0.0022 + f * 0.005 + wobble) * calm,
+        (0.0004 + D * 0.001 + f * 0.002 + wobble * 0.5) * calm,
       );
     }
     if (noise.current?.blendMode) {
-      noise.current.blendMode.opacity.value = 0.14 + D * 0.2 + f * 0.55;
+      noise.current.blendMode.opacity.value =
+        (0.14 + D * 0.2 + f * 0.55) * calm;
     }
   });
 

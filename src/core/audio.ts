@@ -230,6 +230,46 @@ export function setFigureState(present: boolean, near: boolean): void {
   humGain.gain.setTargetAtTime(near ? 0.1 : 0.16, t, 0.4);
 }
 
+// ─ 疊加態:所有分支的嗡鳴同時響 — 一簇彼此走音的諧波慢慢湧上來
+let superGain: GainNode | null = null;
+
+export function setSuperposition(on: boolean): void {
+  if (!ctx || !master) return;
+  const t = ctx.currentTime;
+  if (on && !superGain) {
+    superGain = ctx.createGain();
+    superGain.gain.value = 0;
+    superGain.connect(master);
+    if (delayIn) superGain.connect(delayIn);
+    for (const cents of [-136, -84, -33, 29, 76, 132]) {
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.value = 110;
+      o.detune.value = cents;
+      const g = ctx.createGain();
+      g.gain.value = 0.13;
+      o.connect(g);
+      g.connect(superGain);
+      o.start();
+    }
+    superGain.gain.linearRampToValueAtTime(0.45, t + 7);
+    feedback?.gain.setTargetAtTime(0.72, t, 2);
+  }
+}
+
+/** 收束:疊加的所有音淡出,只留下一個乾淨的 55Hz — 停止嘗試返回的安靜 */
+export function resolveEnd(): void {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  superGain?.gain.setTargetAtTime(0, t, 2.5);
+  humGain?.gain.setTargetAtTime(0.06, t, 3);
+  toneGain?.gain.setTargetAtTime(0.004, t, 3);
+  detuneOsc?.detune.setTargetAtTime(0, t, 2);
+  feedback?.gain.setTargetAtTime(0.18, t, 3);
+  lfoDepth?.gain.setTargetAtTime(0, t, 2);
+  for (const v of doorVoices) v.gain.gain.setTargetAtTime(0, t, 0.8);
+}
+
 /** 穿門瞬間:一聲噪音掃頻 + 主音量短暫下沉(世界被抽換的體感) */
 export function pulseTraverse(): void {
   if (!ctx || !master || !noiseBuf || !delayIn) return;

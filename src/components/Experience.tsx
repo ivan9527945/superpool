@@ -9,11 +9,14 @@ import { useEffect, useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { useStore } from '@/core/store';
 import { generateRoomSpec } from '@/core/room';
-import { mirrorSeed, clamp01 } from '@/core/prng';
+import { mirrorSeed, clamp01, hashCombine } from '@/core/prng';
 import {
   setAudioDivergence,
   setDoorVoices,
   setFigureState,
+  setSuperposition,
+  resolveEnd,
+  pulseTraverse,
 } from '@/core/audio';
 import Room from './Room';
 import Pool from './Pool';
@@ -21,10 +24,16 @@ import Player from './Player';
 import Effects from './Effects';
 import Hud from './Hud';
 
+/** 進疊加態的分岔度閾值;壓回這以下則觸發「揭露」 */
+const SUPER_D = 0.9;
+const LUCID_D = 0.02;
+
 export default function Experience() {
   const branchId = useStore((s) => s.branchId);
   const D = useStore((s) => s.D);
   const started = useStore((s) => s.started);
+  const phase = useStore((s) => s.phase);
+  const travelNonce = useStore((s) => s.travelNonce);
 
   const spec = useMemo(() => generateRoomSpec(branchId, D), [branchId, D]);
   // 倒影分支:身影在水裡是實心的(那是它的世界)。
@@ -48,7 +57,7 @@ export default function Experience() {
 
   // 房間就緒(且音訊已啟動)後:掛上各門的水聲、通報身影存在
   useEffect(() => {
-    if (!started) return;
+    if (!started || phase !== 'play') return;
     setDoorVoices(
       spec.doors.map((d) => ({
         x: d.x,
@@ -57,7 +66,50 @@ export default function Experience() {
       })),
     );
     setFigureState(!!spec.figure, false);
-  }, [spec, started]);
+  }, [spec, started, phase]);
+
+  // ─ 結局觸發:D 衝過閾值 → 疊加態;把 D 壓回 ≈0 → 揭露「沒有原初的家」
+  useEffect(() => {
+    if (!started || phase !== 'play') return;
+    if (D >= SUPER_D) {
+      pulseTraverse();
+      useStore.getState().setPhase('super');
+    } else if (D <= LUCID_D && travelNonce > 0) {
+      useStore.getState().setPhase('lucid');
+    }
+  }, [D, travelNonce, started, phase]);
+
+  // ─ 結局時序:lucid 字幕 16s → 疊加態 30s → 收束
+  useEffect(() => {
+    if (phase === 'lucid') {
+      const id = setTimeout(() => {
+        pulseTraverse();
+        useStore.getState().setPhase('super');
+      }, 16000);
+      return () => clearTimeout(id);
+    }
+    if (phase === 'super') {
+      setSuperposition(true);
+      setDoorVoices([]);
+      setFigureState(true, false);
+      const id = setTimeout(() => useStore.getState().setPhase('end'), 30000);
+      return () => clearTimeout(id);
+    }
+    if (phase === 'end') resolveEnd();
+  }, [phase]);
+
+  // ─ 疊加態:同一個房間在五個現實裡的版本,同時被 render。
+  //   每一層裡都站著一個實心的你(除了你自己站的主層)。
+  const superSpecs = useMemo(() => {
+    if (phase !== 'super' && phase !== 'end') return null;
+    return Array.from({ length: 5 }, (_, i) =>
+      generateRoomSpec(
+        hashCombine(branchId, 0x5150 + i),
+        clamp01(0.12 + i * 0.19),
+        { figureChance: i === 0 ? 0 : 1, figureMode: 'solid' },
+      ),
+    );
+  }, [phase, branchId]);
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#000' }}>
@@ -76,9 +128,40 @@ export default function Experience() {
             (spec.biome === 'wetzone' ? 21 : 30) - D * 11,
           ]}
         />
-        <Room spec={spec} />
-        <Pool spec={spec} mirrorSpec={mirror} D={D} fogColor={fogColor} />
-        {started && <Player spec={spec} />}
+        {superSpecs ? (
+          <>
+            {superSpecs.map((s, i) => (
+              <group
+                key={s.seed}
+                position={[
+                  (i % 2 ? -1 : 1) * i * 0.35,
+                  0,
+                  (((i * 7) % 3) - 1) * 0.45,
+                ]}
+                rotation={[0, (i - 2) * 0.022, 0]}
+              >
+                <Room
+                  spec={s}
+                  ghost={i === 0 ? 0.85 : 0.3 - i * 0.03}
+                  lit={i === 0}
+                />
+              </group>
+            ))}
+            <Pool
+              spec={superSpecs[0]}
+              mirrorSpec={mirror}
+              D={D}
+              fogColor={fogColor}
+            />
+            {started && <Player spec={superSpecs[0]} />}
+          </>
+        ) : (
+          <>
+            <Room spec={spec} />
+            <Pool spec={spec} mirrorSpec={mirror} D={D} fogColor={fogColor} />
+            {started && <Player spec={spec} />}
+          </>
+        )}
         <Effects />
       </Canvas>
       <Hud />

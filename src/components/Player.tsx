@@ -146,7 +146,8 @@ export default function Player({ spec }: { spec: RoomSpec }) {
       }
     }
 
-    // 門的觸發:走到遠牆上的門口 = 穿進新的分支
+    // 門的觸發:走到遠牆上的門口 = 穿進新的分支(結局階段不再有門)
+    if (useStore.getState().phase !== 'play') return;
     for (const d of spec.doors) {
       if (p.z < -spec.depth / 2 + 0.62 && Math.abs(p.x - d.x) < 0.72) {
         pulseTraverse();

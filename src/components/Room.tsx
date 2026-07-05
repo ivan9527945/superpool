@@ -4,7 +4,7 @@
 // 「倒影裡的房間」只是拿另一個 seed 生成的同構空間。
 
 import * as THREE from 'three';
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import type { FigureSpec, LightSpec, RoomSpec } from '@/core/room';
 import { makeTileTexture } from '@/core/textures';
@@ -144,12 +144,32 @@ function Tiled(props: {
 export default function Room({
   spec,
   variant = 'real',
+  ghost = 1,
+  lit = true,
 }: {
   spec: RoomSpec;
   variant?: 'real' | 'mirror';
+  /** < 1 = 疊加態的半透明分身:沒有單一實心幾何 */
+  ghost?: number;
+  /** false = 分身層不掛真實光源(疊加態只有主層照明) */
+  lit?: boolean;
 }) {
   const base = useMemo(() => makeTileTexture(), []);
   const { width, depth, height, pool, blend, basinDepth } = spec;
+  const groupRef = useRef<THREE.Group>(null);
+
+  // 疊加態:整層房間的材質改半透明。材質實例都是這棵子樹私有的,直接遍歷改。
+  useEffect(() => {
+    if (ghost >= 1 || !groupRef.current) return;
+    groupRef.current.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const m = mesh.material as THREE.Material & { opacity: number };
+      m.transparent = true;
+      m.opacity = Math.min(m.opacity, ghost);
+      m.depthWrite = false;
+    });
+  }, [ghost, spec]);
 
   const cols = useMemo(
     () => ({
@@ -173,8 +193,10 @@ export default function Room({
   );
 
   return (
-    <group>
-      <ambientLight intensity={0.55 - blend * 0.25} color={cols.amb} />
+    <group ref={groupRef}>
+      {lit && (
+        <ambientLight intensity={0.55 - blend * 0.25} color={cols.amb} />
+      )}
 
       {/* 地板(四塊,繞開泳池) */}
       <Tiled base={base} w={width} h={pz0 + depth / 2} color={cols.floor}
@@ -217,7 +239,7 @@ export default function Room({
       {/* 燈具:亮/死/閃爍由 seed + D 決定;前三盞亮燈掛真實點光源 */}
       {spec.lights.map((l, i) => (
         <Fixture key={i} l={l} height={height} color={cols.lightOn}
-          withPoint={litSet.has(l)} />
+          withPoint={lit && litSet.has(l)} />
       ))}
 
       {/* 池邊柱 */}
@@ -251,8 +273,10 @@ export default function Room({
             <planeGeometry args={[1.04, 0.07]} />
             <meshBasicMaterial color={d.cue} toneMapped={false} />
           </mesh>
-          <pointLight position={[0, 0.28, 0.5]}
-            intensity={2.4} distance={3.4} decay={2} color={d.cue} />
+          {lit && (
+            <pointLight position={[0, 0.28, 0.5]}
+              intensity={2.4} distance={3.4} decay={2} color={d.cue} />
+          )}
         </group>
       ))}
 
