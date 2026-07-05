@@ -7,17 +7,27 @@
 import * as THREE from 'three';
 import { useEffect, useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { useStore } from '@/core/store';
-import { generateRoomSpec } from '@/core/room';
+import { useStore, ROOT_BRANCH } from '@/core/store';
+import { generateRoomSpec, type Archetype } from '@/core/room';
 import { mirrorSeed, clamp01, hashCombine } from '@/core/prng';
 import {
   setAudioDivergence,
   setDoorVoices,
   setFigureState,
   setSuperposition,
+  setUnderwater,
   resolveEnd,
   pulseTraverse,
 } from '@/core/audio';
+
+/** 各原型的霧氛圍(亮水域開闊、封閉空間壓縮、淹水室濃稠) */
+const FOG: Record<Archetype, { base: string; near: number; far: number }> = {
+  poolhall: { base: '#cfe6e0', near: 6, far: 46 },
+  arcade: { base: '#d8ece6', near: 8, far: 50 },
+  flooded: { base: '#175059', near: 0.5, far: 11 },
+  storage: { base: '#9fada6', near: 3, far: 26 },
+  corridor: { base: '#7f9a95', near: 2.2, far: 24 },
+};
 import Room from './Room';
 import Pool from './Pool';
 import Player from './Player';
@@ -35,7 +45,22 @@ export default function Experience() {
   const phase = useStore((s) => s.phase);
   const travelNonce = useStore((s) => s.travelNonce);
 
-  const spec = useMemo(() => generateRoomSpec(branchId, D), [branchId, D]);
+  // debug:?a=arcade 強制原型
+  const forced = useMemo(() => {
+    if (typeof window === 'undefined') return undefined;
+    const a = new URLSearchParams(window.location.search).get('a');
+    return a && a in FOG ? (a as Archetype) : undefined;
+  }, []);
+
+  const spec = useMemo(
+    () =>
+      generateRoomSpec(branchId, D, {
+        // 家永遠是泳池廳
+        forceArchetype:
+          forced ?? (branchId === ROOT_BRANCH ? 'poolhall' : undefined),
+      }),
+    [branchId, D, forced],
+  );
   // 倒影分支:身影在水裡是實心的(那是它的世界)。
   // D > 0.75 反轉:水裡的它消失 — 它已經滲透過來了。
   const mirror = useMemo(
@@ -47,8 +72,12 @@ export default function Experience() {
     [branchId, D],
   );
   const fogColor = useMemo(
-    () => new THREE.Color('#0c2124').lerp(new THREE.Color('#251d09'), D),
-    [D],
+    () =>
+      new THREE.Color(FOG[spec.archetype].base).lerp(
+        new THREE.Color('#3e3410'),
+        D * 0.85,
+      ),
+    [D, spec.archetype],
   );
 
   useEffect(() => {
@@ -66,6 +95,7 @@ export default function Experience() {
       })),
     );
     setFigureState(!!spec.figure, false);
+    setUnderwater(spec.floodLevel != null);
   }, [spec, started, phase]);
 
   // ─ 結局觸發:D 衝過閾值 → 疊加態;把 D 壓回 ≈0 → 揭露「沒有原初的家」
@@ -119,13 +149,12 @@ export default function Experience() {
         gl={{ antialias: true, powerPreference: 'high-performance' }}
       >
         <color attach="background" args={[fogColor]} />
-        {/* 濕區的霧更近更濃:蒸氣間的體感 */}
         <fog
           attach="fog"
           args={[
             fogColor,
-            spec.biome === 'wetzone' ? 1.6 : 3,
-            (spec.biome === 'wetzone' ? 21 : 30) - D * 11,
+            FOG[spec.archetype].near,
+            Math.max(9, FOG[spec.archetype].far - D * 14),
           ]}
         />
         {superSpecs ? (

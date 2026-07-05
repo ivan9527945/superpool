@@ -79,14 +79,17 @@ export default function Pool({
   const mirrorScene = useMemo(() => new THREE.Scene(), []);
   useEffect(() => {
     mirrorScene.background = fogColor.clone().multiplyScalar(0.55);
-    // 倒影分支的霧跟它自己的 biome:水裡可能已經是濕區,而你站的還是池核
-    const wet = mirrorSpec.biome === 'wetzone';
+    // 倒影分支的霧跟它自己的原型:水裡可能是另一種空間
+    const closed =
+      mirrorSpec.archetype === 'corridor' ||
+      mirrorSpec.archetype === 'storage' ||
+      mirrorSpec.floodLevel != null;
     mirrorScene.fog = new THREE.Fog(
       fogColor.clone().multiplyScalar(0.7),
-      wet ? 1.6 : 3,
-      wet ? 17 : 24,
+      closed ? 1.6 : 4,
+      closed ? 17 : 30,
     );
-  }, [mirrorScene, fogColor, mirrorSpec.biome]);
+  }, [mirrorScene, fogColor, mirrorSpec.archetype, mirrorSpec.floodLevel]);
 
   const virtualCamera = useMemo(() => new THREE.PerspectiveCamera(), []);
   const uTextureMatrix = useMemo(() => new THREE.Matrix4(), []);
@@ -192,15 +195,17 @@ export default function Pool({
     gl.xr.enabled = prevXr;
   });
 
+  const mw = spec.mirrorWater;
+  if (!mw) return null;
   return (
     <>
       {createPortal(<Room spec={mirrorSpec} variant="mirror" />, mirrorScene)}
       <mesh
         ref={meshRef}
         rotation-x={-Math.PI / 2}
-        position={[spec.pool.x, spec.waterY, spec.pool.z]}
+        position={[mw.x, mw.y, mw.z]}
       >
-        <planeGeometry args={[spec.pool.w, spec.pool.d]} />
+        <planeGeometry args={[mw.w, mw.d]} />
         <primitive object={material} attach="material" />
       </mesh>
     </>

@@ -11,6 +11,7 @@ let noiseBuf: AudioBuffer | null = null;
 let lfoDepth: GainNode | null = null;
 let humGain: GainNode | null = null;
 let toneGain: GainNode | null = null;
+let envFilter: BiquadFilterNode | null = null;
 let currentD = 0;
 let figurePresent = false;
 
@@ -35,7 +36,12 @@ export function startAudio(): void {
 
   master = ctx.createGain();
   master.gain.value = 0;
-  master.connect(ctx.destination);
+  // 環境濾波:淹水室把整個世界悶掉
+  envFilter = ctx.createBiquadFilter();
+  envFilter.type = 'lowpass';
+  envFilter.frequency.value = 19000;
+  master.connect(envFilter);
+  envFilter.connect(ctx.destination);
   master.gain.linearRampToValueAtTime(0.5, ctx.currentTime + 2.5);
 
   // ─ 嗡鳴:三個諧波,第二個綁 detune
@@ -219,6 +225,12 @@ export function updateListener(px: number, pz: number, yaw: number): void {
       v.pan.pan.setTargetAtTime(Math.max(-1, Math.min(1, cross)), t, 0.08);
     }
   }
+}
+
+/** 環境:淹水室 → 全世界悶進水裡 */
+export function setUnderwater(on: boolean): void {
+  if (!ctx || !envFilter) return;
+  envFilter.frequency.setTargetAtTime(on ? 520 : 19000, ctx.currentTime, 0.5);
 }
 
 /** 身影狀態:在現實中 → 房間音變厚、水滴變稀;走近它 → 嗡鳴退開 */

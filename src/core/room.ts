@@ -1,22 +1,30 @@
-// 內容模型:房間 = 基礎模板 + 一組由 seed 決定論生成的突變。
+// 內容模型:房間 = 原型模板 + 一組由 seed 決定論生成的突變。
 // generateRoomSpec 是純函數 — 同一個 (seed, D) 永遠產出同一個房間。
-// biome 由 D 的區間決定(帶 seed 抖動),切換基礎模板與可用突變集合。
+// 每道門後是不同「原型」的空間:泳池廳、拱廊水道、淹水室、儲藏間、濕區廊道。
 
 import { mulberry32, clamp01, lerpHex } from './prng';
 
-export type Biome = 'poolcore' | 'wetzone';
+export type Archetype =
+  | 'poolhall' // 開闊泳池廳:天窗、扶梯、池緣,「家」的樣子
+  | 'arcade' // 拱廊水道:連續拱牆跨過水道,錯綜的空間
+  | 'flooded' // 淹水室:整室在水中,漂浮
+  | 'storage' // 儲藏間:低天花板、成堆泳池椅、地面積水
+  | 'corridor'; // 濕區廊道:窄長、排水槽
+
+export interface WaterRect {
+  x: number;
+  z: number;
+  w: number;
+  d: number;
+}
 
 export interface DoorSpec {
   index: number;
-  /** 門在遠牆(z = -depth/2)上的 x 位置 */
   x: number;
-  /** 穿過這道門的 ΔD:負 = 相干(靠近家),正 = 發散 */
   dDelta: number;
-  /** 分岔預覽線索的顏色(門縫透光):青綠 = 低分岔,黃 = 高分岔 */
   cue: string;
 }
 
-/** 不該存在的門:只在側牆上,沒有光、沒有去處 */
 export interface FakeDoorSpec {
   wall: 'east' | 'west';
   z: number;
@@ -26,7 +34,6 @@ export interface LightSpec {
   x: number;
   z: number;
   on: boolean;
-  /** 接觸不良的閃爍(濕區與高分岔的突變) */
   flicker: boolean;
 }
 
@@ -37,7 +44,15 @@ export interface ColumnSpec {
 }
 
 export interface PropSpec {
-  kind: 'chair' | 'ring' | 'bench' | 'locker';
+  kind:
+    | 'chair'
+    | 'ring'
+    | 'bench'
+    | 'locker'
+    | 'chairstack'
+    | 'duck'
+    | 'ladder'
+    | 'slide';
   x: number;
   z: number;
   rotY: number;
@@ -46,26 +61,52 @@ export interface PropSpec {
 export interface FigureSpec {
   x: number;
   z: number;
-  /** phase = 半存在的殘影(滲入中);solid = 它已經過來了 */
   mode: 'solid' | 'phase';
+}
+
+export interface NicheSpec {
+  wall: 'east' | 'west';
+  z: number;
+  w: number;
+  h: number;
+}
+
+export interface SkylightSpec {
+  x: number;
+  z: number;
+  w: number;
+  d: number;
 }
 
 export interface RoomSpec {
   seed: number;
-  biome: Biome;
+  archetype: Archetype;
   width: number;
   depth: number;
   height: number;
-  pool: { x: number; z: number; w: number; d: number };
-  waterY: number;
+  /** 擋路的水域 */
+  water: WaterRect[];
+  /** 渲染平行宇宙倒影的那面水(池面/水道/積水)與其高度 */
+  mirrorWater: (WaterRect & { y: number }) | null;
+  /** flooded:整室淹水的水面高度(null = 沒淹) */
+  floodLevel: number | null;
   basinDepth: number;
+  /** arcade:拱牆的 z 位置 */
+  arches: number[];
+  /** arcade:水道半寬 */
+  canalHalf: number;
+  niches: NicheSpec[];
+  skylights: SkylightSpec[];
+  /** 高窗所在的側牆(null = 無窗) */
+  windowWall: 'east' | 'west' | null;
+  /** 磚裙牆高度(以上是粉刷牆) */
+  wainscot: number;
   lights: LightSpec[];
   columns: ColumnSpec[];
   props: PropSpec[];
   doors: DoorSpec[];
   fakeDoors: FakeDoorSpec[];
   figure: FigureSpec | null;
-  /** 調色盤漂移量:0 = 池核青綠,1 = 後室黃 */
   blend: number;
 }
 
@@ -77,49 +118,147 @@ export function cueColor(dDelta: number): string {
   return lerpHex(CUE_COHERENT, CUE_DIVERGENT, t);
 }
 
+/** 原型選擇:seed 決定,D 輕微偏壓(離家越遠越封閉、越不對勁) */
+function pickArchetype(roll: number, D: number): Archetype {
+  const w: [Archetype, number][] = [
+    ['poolhall', 0.3 * (1.15 - 0.55 * D)],
+    ['arcade', 0.24 * (1.15 - 0.45 * D)],
+    ['flooded', 0.15 + 0.05 * D],
+    ['storage', 0.14 + 0.08 * D],
+    ['corridor', 0.14 + 0.2 * D],
+  ];
+  const total = w.reduce((s, [, v]) => s + v, 0);
+  let acc = 0;
+  for (const [a, v] of w) {
+    acc += v / total;
+    if (roll < acc) return a;
+  }
+  return 'corridor';
+}
+
 export function generateRoomSpec(
   seed: number,
   D: number,
-  opts: { figureChance?: number; figureMode?: 'solid' | 'phase' } = {},
+  opts: {
+    figureChance?: number;
+    figureMode?: 'solid' | 'phase';
+    forceArchetype?: Archetype;
+  } = {},
 ): RoomSpec {
   const rng = mulberry32(seed);
 
-  // biome:D 越過閾值進入濕區;閾值帶 seed 抖動,讓邊界不是一條硬線
-  const biomeRoll = rng();
-  const biome: Biome =
-    D >= 0.35 + (biomeRoll - 0.5) * 0.1 ? 'wetzone' : 'poolcore';
+  const archRoll = rng();
+  const archetype = opts.forceArchetype ?? pickArchetype(archRoll, D);
 
-  // 尺寸與泳池:池核 = 開闊泳池廳;濕區 = 窄長廊道 + 退化成排水槽的池
+  // ── 尺寸與水體(依原型)
   let width: number;
   let depth: number;
   let height: number;
-  let pool: { x: number; z: number; w: number; d: number };
-  if (biome === 'poolcore') {
-    width = 11 + rng() * 6;
-    depth = 16 + rng() * 8;
-    height = 4.2 + rng() * 1.6;
-    pool = { x: 0, z: -depth * 0.06, w: width * 0.52, d: depth * 0.44 };
+  const water: WaterRect[] = [];
+  let mirrorWater: (WaterRect & { y: number }) | null = null;
+  let floodLevel: number | null = null;
+  let basinDepth = 1.6;
+  const arches: number[] = [];
+  let canalHalf = 0;
+
+  if (archetype === 'poolhall') {
+    width = 13 + rng() * 6;
+    depth = 18 + rng() * 9;
+    height = 4.6 + rng() * 1.8;
+    const pool = { x: 0, z: -depth * 0.05, w: width * 0.5, d: depth * 0.42 };
+    water.push(pool);
+    mirrorWater = { ...pool, y: -0.35 };
+  } else if (archetype === 'arcade') {
+    width = 10 + rng() * 4.5;
+    depth = 22 + rng() * 8;
+    height = 4.8 + rng() * 1.4;
+    canalHalf = width * (0.2 + rng() * 0.06);
+    const canal = { x: 0, z: 0, w: canalHalf * 2, d: depth - 3 };
+    water.push(canal);
+    mirrorWater = { ...canal, y: -0.3 };
+    basinDepth = 1.1;
+    const archCount = Math.max(3, Math.floor(depth / 4.6));
+    for (let i = 1; i <= archCount; i++) {
+      arches.push(-depth / 2 + (i * depth) / (archCount + 1) + (rng() - 0.5) * 0.5);
+    }
+  } else if (archetype === 'flooded') {
+    width = 9 + rng() * 5;
+    depth = 14 + rng() * 8;
+    height = 4.2 + rng() * 1.4;
+    floodLevel = height * (0.62 + rng() * 0.16);
+    basinDepth = 0;
+  } else if (archetype === 'storage') {
+    width = 8 + rng() * 5;
+    depth = 12 + rng() * 8;
+    height = 2.7 + rng() * 0.7;
+    // 地面積水:乾房間裡的平行宇宙之窗
+    const px = (rng() - 0.5) * width * 0.4;
+    const pz = (rng() - 0.5) * depth * 0.4;
+    mirrorWater = {
+      x: px,
+      z: pz,
+      w: 1.6 + rng() * 2.2,
+      d: 1.2 + rng() * 1.8,
+      y: 0.012,
+    };
+    basinDepth = 0;
   } else {
+    // corridor
     width = 6.8 + rng() * 3;
     depth = 22 + rng() * 8;
     height = 3.1 + rng() * 0.9;
     const side = rng() < 0.5 ? -1 : 1;
-    pool = {
+    const drain = {
       x: side * width * 0.12,
       z: -depth * 0.05,
       w: width * 0.32,
       d: depth * 0.55,
     };
+    water.push(drain);
+    mirrorWater = { ...drain, y: -0.35 };
+    basinDepth = 0.9;
   }
-  const waterY = -0.35;
-  const basinDepth = biome === 'poolcore' ? 1.5 : 0.9;
 
-  // 天花板燈陣:D 越高,亮著的越少;濕區的燈開始接觸不良
-  const nx = Math.max(biome === 'poolcore' ? 2 : 1, Math.floor(width / 3.6));
-  const nz = Math.max(3, Math.floor(depth / 3.6));
-  const onProb = clamp01((biome === 'poolcore' ? 0.92 : 0.8) - D * 0.8);
+  // ── 天窗與高窗(明亮原型才有;這是「白日感」的來源)
+  const skylights: SkylightSpec[] = [];
+  let windowWall: 'east' | 'west' | null = null;
+  const skyRoll = rng();
+  const winRoll = rng();
+  if (archetype === 'poolhall' || archetype === 'arcade') {
+    const n = archetype === 'poolhall' ? 2 + Math.floor(skyRoll * 2) : 3;
+    for (let i = 0; i < n; i++) {
+      skylights.push({
+        x: (rng() - 0.5) * width * 0.4,
+        z: -depth / 2 + ((i + 0.5) * depth) / n,
+        w: 1.6 + rng() * 1.6,
+        d: 2.4 + rng() * 2,
+      });
+    }
+    if (winRoll < 0.75) windowWall = winRoll < 0.375 ? 'east' : 'west';
+  } else if (archetype === 'flooded' && skyRoll < 0.6) {
+    skylights.push({
+      x: 0,
+      z: -depth * 0.1,
+      w: 1.8 + rng() * 1.4,
+      d: 1.8 + rng() * 1.4,
+    });
+  }
+
+  // ── 磚裙牆高度
+  const wainscot =
+    archetype === 'storage' ? height : 1.6 + rng() * 0.8;
+
+  // ── 燈陣:D 越高亮的越少;封閉原型的燈開始接觸不良
+  const nx = Math.max(archetype === 'corridor' ? 1 : 2, Math.floor(width / 3.8));
+  const nz = Math.max(3, Math.floor(depth / 3.8));
+  const onProb = clamp01(
+    (archetype === 'corridor' || archetype === 'storage' ? 0.82 : 0.94) -
+      D * 0.8,
+  );
   const flickerProb =
-    biome === 'wetzone' ? 0.25 + D * 0.3 : Math.max(0, D - 0.2) * 0.25;
+    archetype === 'corridor' || archetype === 'storage'
+      ? 0.22 + D * 0.3
+      : Math.max(0, D - 0.25) * 0.3;
   const lights: LightSpec[] = [];
   for (let i = 0; i < nx; i++) {
     for (let j = 0; j < nz; j++) {
@@ -134,51 +273,73 @@ export function generateRoomSpec(
     }
   }
 
-  // 柱:池核沿池邊;濕區貼牆。D 高時開始歪斜(幾何相干性崩解)
+  // ── 柱:D 高開始歪斜
   const columns: ColumnSpec[] = [];
   const tiltAmt = D > 0.45 ? (D - 0.45) * 1.6 : 0;
-  if (biome === 'poolcore') {
-    const colX = pool.w / 2 + 1.15;
-    const colRows = Math.max(2, Math.floor(pool.d / 4));
-    for (let j = 0; j < colRows; j++) {
-      const z = pool.z - pool.d / 2 + ((j + 0.5) * pool.d) / colRows;
-      const t1 = (rng() - 0.5) * 0.16;
-      const t2 = (rng() - 0.5) * 0.16;
-      columns.push({ x: -colX, z, tilt: t1 * tiltAmt });
-      columns.push({ x: colX, z, tilt: t2 * tiltAmt });
+  if (archetype === 'poolhall') {
+    const colX = water[0].w / 2 + 1.3;
+    const rows = Math.max(2, Math.floor(water[0].d / 4.2));
+    for (let j = 0; j < rows; j++) {
+      const z = water[0].z - water[0].d / 2 + ((j + 0.5) * water[0].d) / rows;
+      columns.push({ x: -colX, z, tilt: (rng() - 0.5) * 0.16 * tiltAmt });
+      columns.push({ x: colX, z, tilt: (rng() - 0.5) * 0.16 * tiltAmt });
     }
-  } else {
-    const colRows = Math.max(2, Math.floor(depth / 6));
-    for (let j = 0; j < colRows; j++) {
-      const z = -depth / 2 + ((j + 0.5) * depth) / colRows;
-      const t1 = (rng() - 0.5) * 0.2;
-      const t2 = (rng() - 0.5) * 0.2;
-      columns.push({ x: -(width / 2 - 0.45), z, tilt: t1 * tiltAmt });
-      columns.push({ x: width / 2 - 0.45, z, tilt: t2 * tiltAmt });
+  } else if (archetype === 'corridor' || archetype === 'storage') {
+    const rows = Math.max(2, Math.floor(depth / 6));
+    for (let j = 0; j < rows; j++) {
+      const z = -depth / 2 + ((j + 0.5) * depth) / rows;
+      columns.push({
+        x: -(width / 2 - 0.45),
+        z,
+        tilt: (rng() - 0.5) * 0.2 * tiltAmt,
+      });
+      columns.push({
+        x: width / 2 - 0.45,
+        z,
+        tilt: (rng() - 0.5) * 0.2 * tiltAmt,
+      });
     }
   }
 
-  // 門:2–3 道,在遠牆上;每道帶一個分岔預覽值
-  const doorCount = rng() < 0.5 ? 2 : 3;
+  // ── 壁龕(封閉原型的空間層次)
+  const niches: NicheSpec[] = [];
+  if (archetype === 'corridor' || archetype === 'storage') {
+    const n = 1 + Math.floor(rng() * 3);
+    for (let i = 0; i < n; i++) {
+      niches.push({
+        wall: rng() < 0.5 ? 'east' : 'west',
+        z: -depth / 2 + 3 + rng() * (depth - 6),
+        w: 1.2 + rng() * 1.4,
+        h: Math.min(height - 0.5, 1.8 + rng() * 0.7),
+      });
+    }
+  }
+
+  // ── 門:2–3 道,在遠牆上(arcade 的門在兩側走道端)
+  const doorCount =
+    archetype === 'arcade' ? 2 : rng() < 0.5 ? 2 : 3;
   const spread = (width - 4) / 2;
   const hasCoherent = rng() < 0.7;
   const coherentIdx = Math.floor(rng() * doorCount);
   const doors: DoorSpec[] = [];
   for (let i = 0; i < doorCount; i++) {
-    const x =
-      -spread + ((i + 0.5) * 2 * spread) / doorCount + (rng() - 0.5) * 0.6;
+    let x: number;
+    if (archetype === 'arcade') {
+      const ledgeMid = (canalHalf + width / 2) / 2;
+      x = (i === 0 ? -1 : 1) * ledgeMid + (rng() - 0.5) * 0.4;
+    } else {
+      x = -spread + ((i + 0.5) * 2 * spread) / doorCount + (rng() - 0.5) * 0.6;
+    }
     const coherent = hasCoherent && i === coherentIdx;
-    const dDelta = coherent
-      ? -(0.02 + rng() * 0.05)
-      : 0.02 + rng() * 0.14;
+    const dDelta = coherent ? -(0.02 + rng() * 0.05) : 0.02 + rng() * 0.14;
     doors.push({ index: i, x, dDelta, cue: cueColor(dDelta) });
   }
 
-  // 不該有的門:濕區高分岔時,側牆上多出黑洞般的假門
+  // ── 不該有的門(封閉原型高 D)
   const fakeDoors: FakeDoorSpec[] = [];
   const fakeRoll1 = rng();
   const fakeRoll2 = rng();
-  if (biome === 'wetzone') {
+  if (archetype === 'corridor' || archetype === 'storage') {
     const fakeChance = clamp01((D - 0.4) * 1.6);
     if (fakeRoll1 < fakeChance) {
       fakeDoors.push({
@@ -194,34 +355,80 @@ export function generateRoomSpec(
     }
   }
 
-  // 道具:池核 = 池畔椅/救生圈;濕區 = 更衣室長凳/置物櫃
+  // ── 道具(依原型)
   const props: PropSpec[] = [];
-  const walkSide = -Math.sign(pool.x) || 1; // 濕區的走道側
-  const propCount = Math.floor(rng() * 3);
-  for (let i = 0; i < propCount; i++) {
-    const roll = rng();
-    const zPos = -depth / 2 + 2 + rng() * (depth - 4);
-    if (biome === 'poolcore') {
-      const side = roll < 0.5 ? -1 : 1;
+  const propRolls = [rng(), rng(), rng(), rng(), rng(), rng()];
+  if (archetype === 'poolhall') {
+    // 扶梯永遠在池緣
+    const pool = water[0];
+    props.push({
+      kind: 'ladder',
+      x: pool.x + pool.w / 2,
+      z: pool.z + pool.d * 0.3,
+      rotY: -Math.PI / 2,
+    });
+    if (propRolls[0] < 0.3) {
       props.push({
-        kind: rng() < 0.6 ? 'chair' : 'ring',
-        x: side * (width / 2 - 1.1 - rng() * 0.8),
-        z: zPos,
-        rotY: rng() * Math.PI * 2,
+        kind: 'slide',
+        x: pool.x - pool.w / 2 - 0.4,
+        z: pool.z - pool.d * 0.2,
+        rotY: Math.PI / 2,
       });
-    } else {
+    }
+    if (propRolls[1] < 0.5) {
       props.push({
-        kind: roll < 0.55 ? 'bench' : 'locker',
+        kind: 'chair',
+        x: (propRolls[2] < 0.5 ? -1 : 1) * (width / 2 - 1.3),
+        z: -depth / 2 + 3 + propRolls[3] * (depth - 6),
+        rotY: propRolls[4] * Math.PI * 2,
+      });
+    }
+    if (propRolls[5] < 0.1) {
+      props.push({ kind: 'duck', x: pool.x + (propRolls[2] - 0.5) * pool.w * 0.6, z: pool.z + (propRolls[3] - 0.5) * pool.d * 0.6, rotY: propRolls[4] * 6 });
+    }
+  } else if (archetype === 'storage') {
+    const n = 2 + Math.floor(propRolls[0] * 3);
+    for (let i = 0; i < n; i++) {
+      const r = (propRolls[i % 6] + i * 0.37) % 1;
+      props.push({
+        kind: r < 0.55 ? 'chairstack' : r < 0.8 ? 'locker' : 'bench',
+        x: (r < 0.5 ? -1 : 1) * (width / 2 - 0.9 - r * 0.5),
+        z: -depth / 2 + 2 + ((propRolls[(i + 1) % 6] + i * 0.51) % 1) * (depth - 4),
+        rotY: r < 0.5 ? Math.PI / 2 : -Math.PI / 2,
+      });
+    }
+    if (propRolls[5] < 0.12) {
+      props.push({ kind: 'duck', x: 0, z: depth * 0.2, rotY: propRolls[1] * 6 });
+    }
+  } else if (archetype === 'flooded') {
+    // 漂在水面的椅子
+    const n = Math.floor(propRolls[0] * 3);
+    for (let i = 0; i < n; i++) {
+      props.push({
+        kind: 'chair',
+        x: (propRolls[i + 1] - 0.5) * width * 0.7,
+        z: (propRolls[i + 2] - 0.5) * depth * 0.7,
+        rotY: propRolls[i + 3] * Math.PI * 2,
+      });
+    }
+    if (propRolls[5] < 0.15) {
+      props.push({ kind: 'duck', x: (propRolls[1] - 0.5) * width * 0.5, z: (propRolls[2] - 0.5) * depth * 0.5, rotY: 0 });
+    }
+  } else if (archetype === 'corridor') {
+    const n = Math.floor(propRolls[0] * 3);
+    const walkSide = water[0] ? -Math.sign(water[0].x) || 1 : 1;
+    for (let i = 0; i < n; i++) {
+      const r = propRolls[i + 1];
+      props.push({
+        kind: r < 0.55 ? 'bench' : 'locker',
         x: walkSide * (width / 2 - 0.75),
-        z: zPos,
+        z: -depth / 2 + 2 + propRolls[i + 2] * (depth - 4),
         rotY: walkSide > 0 ? -Math.PI / 2 : Math.PI / 2,
       });
     }
   }
 
-  // 身影:固定抽取三個 roll,再依 chance 決定是否存在(保持 draw 順序穩定)。
-  // 滲入現實的梯度:D 低 → 只有殘影(phase)遠遠站在角落;
-  // D 高 → 實心(solid),而且生成位置沿著牆逐步逼近你這一側。
+  // ── 身影(draw 順序固定)
   const figSide = rng() < 0.5 ? -1 : 1;
   const figZroll = rng();
   const figRoll = rng();
@@ -241,18 +448,27 @@ export function generateRoomSpec(
   }
 
   const blend = clamp01(
-    D * 0.9 + (biome === 'wetzone' ? 0.12 : 0) + (rng() - 0.5) * 0.12,
+    D * 0.9 +
+      (archetype === 'corridor' || archetype === 'storage' ? 0.1 : 0) +
+      (rng() - 0.5) * 0.12,
   );
 
   return {
     seed,
-    biome,
+    archetype,
     width,
     depth,
     height,
-    pool,
-    waterY,
+    water,
+    mirrorWater,
+    floodLevel,
     basinDepth,
+    arches,
+    canalHalf,
+    niches,
+    skylights,
+    windowWall,
+    wainscot,
     lights,
     columns,
     props,
@@ -263,7 +479,11 @@ export function generateRoomSpec(
   };
 }
 
-/** 每個房間的出生點(靠近南牆,面向泳池與門) */
+/** 每個房間的出生點(靠近南牆,面向門) */
 export function spawnPoint(spec: RoomSpec): { x: number; z: number } {
+  if (spec.archetype === 'arcade') {
+    // 出生在其中一側走道
+    return { x: (spec.canalHalf + spec.width / 2) / 2, z: spec.depth / 2 - 1.7 };
+  }
   return { x: 0, z: spec.depth / 2 - 1.7 };
 }

@@ -20,6 +20,8 @@ export default function Player({ spec }: { spec: RoomSpec }) {
   const yaw = useRef(0);
   const pitch = useRef(0);
   const bob = useRef(0);
+  const swim = useRef(0);
+  const vel = useRef({ x: 0, z: 0 });
   const keys = useRef<Record<string, boolean>>({});
   const nearFigure = useRef(false);
 
@@ -98,37 +100,71 @@ export default function Player({ spec }: { spec: RoomSpec }) {
     const r =
       (k['KeyD'] || k['ArrowRight'] ? 1 : 0) - (k['KeyA'] || k['ArrowLeft'] ? 1 : 0);
 
-    const sp = SPEED * dt;
+    // 淹水室:在水中 — 慢、有慣性、緩緩浮沉
+    const flooded = spec.floodLevel != null;
+    const speed = flooded ? 1.5 : SPEED;
     const sy = Math.sin(yaw.current);
     const cy = Math.cos(yaw.current);
-    const dx = (-sy * f + cy * r) * sp;
-    const dz = (-cy * f - sy * r) * sp;
+    const tvx = (-sy * f + cy * r) * speed;
+    const tvz = (-cy * f - sy * r) * speed;
+    if (flooded) {
+      // 水的慣性:速度慢慢跟上目標
+      const ease = 1 - Math.exp(-dt * 1.8);
+      vel.current.x += (tvx - vel.current.x) * ease;
+      vel.current.z += (tvz - vel.current.z) * ease;
+    } else {
+      vel.current.x = tvx;
+      vel.current.z = tvz;
+    }
+    const dx = vel.current.x * dt;
+    const dz = vel.current.z * dt;
 
     const m = 0.42;
     const p = pos.current;
     let nx = THREE.MathUtils.clamp(p.x + dx, -spec.width / 2 + m, spec.width / 2 - m);
     let nz = THREE.MathUtils.clamp(p.z + dz, -spec.depth / 2 + m, spec.depth / 2 - m);
 
-    // 泳池是障礙物:分軸解算,可沿池邊滑行
+    // 水域是障礙物:分軸解算,可沿邊滑行(淹水室例外 — 你就在水裡)
     const e = 0.34;
-    const inPool = (x: number, z: number) =>
-      x > spec.pool.x - spec.pool.w / 2 - e &&
-      x < spec.pool.x + spec.pool.w / 2 + e &&
-      z > spec.pool.z - spec.pool.d / 2 - e &&
-      z < spec.pool.z + spec.pool.d / 2 + e;
-    if (inPool(nx, p.z)) nx = p.x;
-    if (inPool(nx, nz)) nz = p.z;
+    const blocked = (x: number, z: number) =>
+      spec.water.some(
+        (wr) =>
+          x > wr.x - wr.w / 2 - e &&
+          x < wr.x + wr.w / 2 + e &&
+          z > wr.z - wr.d / 2 - e &&
+          z < wr.z + wr.d / 2 + e,
+      );
+    if (!flooded) {
+      if (blocked(nx, p.z)) nx = p.x;
+      if (blocked(nx, nz)) nz = p.z;
+    }
     p.x = nx;
     p.z = nz;
 
     const moving = f !== 0 || r !== 0;
-    if (moving) bob.current += dt * 7.5;
-    camera.position.set(
-      p.x,
-      EYE + (moving ? Math.sin(bob.current) * 0.035 : 0),
-      p.z,
-    );
-    camera.rotation.set(pitch.current, yaw.current, 0);
+    if (flooded) {
+      // 漂浮:大而慢的浮沉 + 極輕的側傾
+      swim.current += dt;
+      const t = swim.current;
+      camera.position.set(
+        p.x,
+        EYE + Math.sin(t * 1.05) * 0.13 + Math.sin(t * 0.47 + 1.3) * 0.07,
+        p.z,
+      );
+      camera.rotation.set(
+        pitch.current,
+        yaw.current,
+        Math.sin(t * 0.4) * 0.022,
+      );
+    } else {
+      if (moving) bob.current += dt * 7.5;
+      camera.position.set(
+        p.x,
+        EYE + (moving ? Math.sin(bob.current) * 0.035 : 0),
+        p.z,
+      );
+      camera.rotation.set(pitch.current, yaw.current, 0);
+    }
 
     // 空間音:各門水聲的音量/聲像跟著位置與朝向
     updateListener(p.x, p.z, yaw.current);

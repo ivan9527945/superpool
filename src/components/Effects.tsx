@@ -94,9 +94,9 @@ export default function Effects() {
     <EffectComposer>
       <primitive object={tracking} />
       <Bloom
-        intensity={0.12 + D * 0.75}
-        luminanceThreshold={0.55}
-        luminanceSmoothing={0.25}
+        intensity={0.09 + D * 0.5}
+        luminanceThreshold={0.78}
+        luminanceSmoothing={0.3}
         mipmapBlur
       />
       {/* callback ref:wrapEffect 會 JSON.stringify 剩餘 props(React 19 含 ref),
