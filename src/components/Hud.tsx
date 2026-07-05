@@ -1,11 +1,15 @@
 'use client';
 
-// 檔案感 OSD:REC、1996 時間戳、TRACKING(其實就是 1-D 的偽裝讀數)。
+// 檔案感 OSD:REC、時間戳、TRACKING(其實就是 1-D 的偽裝讀數)。
+// 日期是不存在的:1997 不是閏年,沒有 2 月 29 日 — 這卷帶子來自一個不該存在的現實。
 // 穿門會讓時間戳跳 137 秒 — 錄影帶被剪接過的暗示。
 
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '@/core/store';
 import { startAudio } from '@/core/audio';
+import { shareUrl } from '@/core/branch';
+import { detectQuality } from '@/core/quality';
+import TouchControls from './TouchControls';
 
 // 揭露:D 歸零時,遊戲不說「你回家了」
 const LUCID_LINES = [
@@ -23,6 +27,31 @@ export default function Hud() {
   const phase = useStore((s) => s.phase);
   const [lucidLine, setLucidLine] = useState(-1);
   const [scramble, setScramble] = useState('');
+  const [coarse, setCoarse] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  // 觸控裝置:顯示虛擬搖桿、換提示文案(UA 或粗指標任一;?touch=1 強制)
+  useEffect(() => {
+    const coarsePtr = window.matchMedia?.('(pointer: coarse)').matches ?? false;
+    const force =
+      new URLSearchParams(window.location.search).get('touch') === '1';
+    setCoarse(force || detectQuality().isMobile || coarsePtr);
+  }, []);
+
+  const share = async () => {
+    const url = shareUrl(useStore.getState().path);
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: '疊池 SUPERPOOL', url });
+      } else {
+        await navigator.clipboard.writeText(url);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      // 使用者取消分享 / 剪貼簿被拒 — 靜默
+    }
+  };
 
   // lucid:字幕逐行浮現
   useEffect(() => {
@@ -136,7 +165,7 @@ export default function Hud() {
           >
             {clock}
             <br />
-            JUN.13 1996
+            FEB.29 1997
           </div>
           <div
             style={{
@@ -205,19 +234,47 @@ export default function Hud() {
               </div>
             </div>
           )}
-          <div
-            className="hint-fade"
-            style={{
-              position: 'absolute',
-              bottom: 18,
-              width: '100%',
-              textAlign: 'center',
-              fontSize: 12,
-              letterSpacing: 3,
-            }}
-          >
-            拖曳環顧 · WASD 移動 · 走向門
-          </div>
+          {phase === 'play' && (
+            <div
+              className="hint-fade"
+              style={{
+                position: 'absolute',
+                bottom: 18,
+                width: '100%',
+                textAlign: 'center',
+                fontSize: 12,
+                letterSpacing: 3,
+              }}
+            >
+              {coarse ? '拖曳環顧 · 搖桿移動 · 走向門' : '拖曳環顧 · WASD 移動 · 走向門'}
+            </div>
+          )}
+
+          {/* 分享此分支:把 path 編進連結,任何人打開就重現同一條路 */}
+          {(phase === 'play' || phase === 'lucid') && (
+            <button
+              onClick={share}
+              style={{
+                position: 'absolute',
+                bottom: 16,
+                right: 20,
+                pointerEvents: 'auto',
+                background: 'rgba(20,40,38,0.3)',
+                border: '1px solid rgba(150,220,205,0.3)',
+                color: '#cfeee6',
+                fontFamily: 'inherit',
+                fontSize: 11,
+                letterSpacing: 2,
+                padding: '7px 12px',
+                cursor: 'pointer',
+                textShadow: 'inherit',
+              }}
+            >
+              {copied ? '已複製分支連結' : '分享此分支'}
+            </button>
+          )}
+
+          {coarse && phase === 'play' && <TouchControls />}
         </>
       ) : (
         <div

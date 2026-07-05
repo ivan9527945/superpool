@@ -2,12 +2,17 @@
 // path 就是可分享/可重播的完整紀錄 — 從 ROOT 依序 hashCombine 即可重建整條路。
 
 import { create } from 'zustand';
-import { hashCombine, clamp01 } from './prng';
+import { clamp01 } from './prng';
+import {
+  ROOT_BRANCH,
+  INITIAL_D,
+  stepBranch,
+  replayPath,
+  decodePath,
+  shareUrl,
+} from './branch';
 
-export const ROOT_BRANCH = 0x50554c31; // 'PUL1'
-
-/** 熵:每次穿門的固定外推,玩家的選擇只能對抗它 */
-const ENTROPY_DRIFT = 0.008;
+export { ROOT_BRANCH } from './branch';
 
 /**
  * 結局狀態機:
@@ -28,35 +33,52 @@ interface SuperpoolState {
   setPhase: (phase: Phase) => void;
 }
 
-/** debug:?d=0.6 直接跳到任意分岔度(client-only,SSR 拿預設值) */
-function initialD(): number {
-  if (typeof window === 'undefined') return 0.08;
-  const v = parseFloat(
-    new URLSearchParams(window.location.search).get('d') ?? '',
-  );
-  return Number.isFinite(v) ? clamp01(v) : 0.08;
+/** 開場狀態:?b= 分享連結優先重播;否則 ?d= debug;否則從家出發 */
+function initialState(): { branchId: number; D: number; path: number[] } {
+  if (typeof window !== 'undefined') {
+    const params = new URLSearchParams(window.location.search);
+    const b = params.get('b');
+    if (b) {
+      const path = decodePath(b);
+      if (path && path.length) {
+        const { branchId, D, valid } = replayPath(path);
+        if (valid) return { branchId, D, path };
+      }
+    }
+    const d = parseFloat(params.get('d') ?? '');
+    if (Number.isFinite(d)) {
+      return { branchId: ROOT_BRANCH, D: clamp01(d), path: [] };
+    }
+  }
+  return { branchId: ROOT_BRANCH, D: INITIAL_D, path: [] };
 }
 
 export const useStore = create<SuperpoolState>((set) => ({
   started: false,
-  branchId: ROOT_BRANCH,
-  D: initialD(),
-  path: [],
+  ...initialState(),
   travelNonce: 0,
   phase: 'play',
   start: () => set({ started: true }),
   setPhase: (phase) => set({ phase }),
   traverse: (doorIndex, dDelta) =>
-    set((s) => ({
-      branchId: hashCombine(s.branchId, doorIndex + 1),
-      D: clamp01(s.D + dDelta + ENTROPY_DRIFT),
-      path: [...s.path, doorIndex],
-      travelNonce: s.travelNonce + 1,
-    })),
+    set((s) => {
+      const next = stepBranch(s.branchId, s.D, doorIndex, dDelta);
+      return {
+        branchId: next.branchId,
+        D: next.D,
+        path: [...s.path, doorIndex],
+        travelNonce: s.travelNonce + 1,
+      };
+    }),
 }));
 
 // debug:console 可直接操作狀態(配合 ?d= 使用)
 if (typeof window !== 'undefined') {
   (window as unknown as { __superpool: typeof useStore }).__superpool =
     useStore;
+  (window as unknown as { __branch: unknown }).__branch = {
+    replayPath,
+    decodePath,
+    shareUrl,
+  };
 }

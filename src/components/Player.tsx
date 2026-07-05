@@ -10,6 +10,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { useStore } from '@/core/store';
 import { pulseTraverse, updateListener, setFigureState } from '@/core/audio';
 import { spawnPoint, type RoomSpec } from '@/core/room';
+import { touchAxis } from '@/core/input';
 
 const EYE = 1.6;
 const SPEED = 3.1;
@@ -95,10 +96,21 @@ export default function Player({ spec }: { spec: RoomSpec }) {
 
     const dt = Math.min(rawDt, 0.05);
     const k = keys.current;
-    const f =
-      (k['KeyW'] || k['ArrowUp'] ? 1 : 0) - (k['KeyS'] || k['ArrowDown'] ? 1 : 0);
-    const r =
-      (k['KeyD'] || k['ArrowRight'] ? 1 : 0) - (k['KeyA'] || k['ArrowLeft'] ? 1 : 0);
+    // 鍵盤與虛擬搖桿相加後夾限(手機無鍵盤,桌機無搖桿)
+    const f = THREE.MathUtils.clamp(
+      (k['KeyW'] || k['ArrowUp'] ? 1 : 0) -
+        (k['KeyS'] || k['ArrowDown'] ? 1 : 0) +
+        touchAxis.forward,
+      -1,
+      1,
+    );
+    const r = THREE.MathUtils.clamp(
+      (k['KeyD'] || k['ArrowRight'] ? 1 : 0) -
+        (k['KeyA'] || k['ArrowLeft'] ? 1 : 0) +
+        touchAxis.right,
+      -1,
+      1,
+    );
 
     // 淹水室:在水中 — 慢、有慣性、緩緩浮沉
     const flooded = spec.floodLevel != null;

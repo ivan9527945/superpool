@@ -4,7 +4,7 @@
 // 強度全部綁 D;穿門瞬間疊一記 flash(世界被抽換的訊號干擾)。
 
 import * as THREE from 'three';
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, type ReactElement } from 'react';
 import { useFrame } from '@react-three/fiber';
 import {
   EffectComposer,
@@ -16,6 +16,7 @@ import {
 } from '@react-three/postprocessing';
 import { BlendFunction, Effect } from 'postprocessing';
 import { useStore } from '@/core/store';
+import { detectQuality } from '@/core/quality';
 
 // VHS tracking 錯位:偶發的整條水平帶狀撕裂,強度綁 D,穿門瞬間最重。
 // 磁帶讀取頭對不準的那種「畫面被扯走一格」。
@@ -59,6 +60,8 @@ export default function Effects() {
   const nonce = useRef(0);
   const offset = useMemo(() => new THREE.Vector2(0.0008, 0.0004), []);
   const tracking = useMemo(() => new VHSTrackingEffect(), []);
+  // 手機:砍掉較貴的 Bloom / Scanline,保留定調的顆粒/色差/暗角/tracking
+  const heavy = useMemo(() => detectQuality().heavyPost, []);
 
   useFrame(({ clock }, dt) => {
     const s = useStore.getState();
@@ -90,32 +93,45 @@ export default function Effects() {
     }
   });
 
-  return (
-    <EffectComposer>
-      <primitive object={tracking} />
+  // EffectComposer 的 children 型別不收 false;用陣列過濾條件 pass。
+  // callback ref:wrapEffect 會 JSON.stringify 剩餘 props(React 19 含 ref),
+  // object ref 掛載後帶循環引用會爆;函數會被 stringify 忽略。
+  const passes = [
+    <primitive key="track" object={tracking} />,
+    heavy ? (
       <Bloom
+        key="bloom"
         intensity={0.09 + D * 0.5}
         luminanceThreshold={0.78}
         luminanceSmoothing={0.3}
         mipmapBlur
       />
-      {/* callback ref:wrapEffect 會 JSON.stringify 剩餘 props(React 19 含 ref),
-          object ref 掛載後帶循環引用會爆;函數會被 stringify 忽略 */}
-      <Noise
-        ref={(e: unknown) => {
-          noise.current = e;
-        }}
-        premultiply
-        blendFunction={BlendFunction.SCREEN}
+    ) : null,
+    <Noise
+      key="noise"
+      ref={(e: unknown) => {
+        noise.current = e;
+      }}
+      premultiply
+      blendFunction={BlendFunction.SCREEN}
+    />,
+    <ChromaticAberration
+      key="chroma"
+      ref={(e: unknown) => {
+        chroma.current = e;
+      }}
+      offset={offset}
+    />,
+    heavy ? (
+      <Scanline
+        key="scan"
+        blendFunction={BlendFunction.OVERLAY}
+        density={1.3}
+        opacity={0.18}
       />
-      <ChromaticAberration
-        ref={(e: unknown) => {
-          chroma.current = e;
-        }}
-        offset={offset}
-      />
-      <Scanline blendFunction={BlendFunction.OVERLAY} density={1.3} opacity={0.18} />
-      <Vignette eskil={false} offset={0.18} darkness={0.88} />
-    </EffectComposer>
-  );
+    ) : null,
+    <Vignette key="vig" eskil={false} offset={0.18} darkness={0.88} />,
+  ].filter(Boolean) as ReactElement[];
+
+  return <EffectComposer>{passes}</EffectComposer>;
 }

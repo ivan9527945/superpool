@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "icons": "node scripts/gen-icons.mjs"
   },
   "dependencies": {
     "@react-three/fiber": "^9.1.0",

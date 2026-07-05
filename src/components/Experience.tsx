@@ -10,6 +10,7 @@ import { Canvas } from '@react-three/fiber';
 import { useStore, ROOT_BRANCH } from '@/core/store';
 import { generateRoomSpec, type Archetype } from '@/core/room';
 import { mirrorSeed, clamp01, hashCombine } from '@/core/prng';
+import { detectQuality } from '@/core/quality';
 import {
   setAudioDivergence,
   setDoorVoices,
@@ -44,6 +45,8 @@ export default function Experience() {
   const started = useStore((s) => s.started);
   const phase = useStore((s) => s.phase);
   const travelNonce = useStore((s) => s.travelNonce);
+
+  const quality = useMemo(() => detectQuality(), []);
 
   // debug:?a=arcade 強制原型
   const forced = useMemo(() => {
@@ -145,8 +148,11 @@ export default function Experience() {
     <div style={{ position: 'fixed', inset: 0, background: '#000' }}>
       <Canvas
         camera={{ fov: 72, near: 0.08, far: 60, position: [0, 1.6, 8] }}
-        dpr={[1, 1.75]}
-        gl={{ antialias: true, powerPreference: 'high-performance' }}
+        dpr={[1, quality.dprMax]}
+        gl={{
+          antialias: quality.heavyPost,
+          powerPreference: 'high-performance',
+        }}
       >
         <color attach="background" args={[fogColor]} />
         <fog

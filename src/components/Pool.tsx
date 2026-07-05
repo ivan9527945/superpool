@@ -10,6 +10,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { createPortal, useFrame, useThree } from '@react-three/fiber';
 import Room from './Room';
 import type { RoomSpec } from '@/core/room';
+import { detectQuality } from '@/core/quality';
 
 const VERT = /* glsl */ `
 uniform mat4 uTextureMatrix;
@@ -67,14 +68,15 @@ export default function Pool({
   }, []);
   useEffect(() => () => fbo.dispose(), [fbo]);
 
-  // 反射 FBO 用半解析度(效能預算)
+  // 反射 FBO 降解析度(效能預算;手機更低)
+  const fboScale = useMemo(() => detectQuality().fboScale, []);
   useEffect(() => {
     const dpr = viewport.dpr ?? 1;
     fbo.setSize(
-      Math.max(2, Math.floor(size.width * dpr * 0.5)),
-      Math.max(2, Math.floor(size.height * dpr * 0.5)),
+      Math.max(2, Math.floor(size.width * dpr * fboScale)),
+      Math.max(2, Math.floor(size.height * dpr * fboScale)),
     );
-  }, [fbo, size.width, size.height, viewport.dpr]);
+  }, [fbo, size.width, size.height, viewport.dpr, fboScale]);
 
   const mirrorScene = useMemo(() => new THREE.Scene(), []);
   useEffect(() => {
