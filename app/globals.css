@@ -1,0 +1,37 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: #000;
+  overflow: hidden;
+  height: 100%;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+canvas {
+  display: block;
+}
+
+.rec-dot {
+  color: #ff4136;
+  animation: rec-blink 1.4s steps(1) infinite;
+}
+
+@keyframes rec-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.hint-fade {
+  opacity: 0.6;
+  animation: hint-out 2s ease 9s forwards;
+}
+
+@keyframes hint-out {
+  to {
+    opacity: 0;
+  }
+}
