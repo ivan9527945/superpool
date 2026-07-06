@@ -9,20 +9,32 @@ import { useStore } from '@/core/store';
 import { startAudio } from '@/core/audio';
 import { shareUrl, encodePath } from '@/core/branch';
 import { detectQuality } from '@/core/quality';
-import { gatherAmbient, probeGeo } from '@/core/watcher';
+import { gatherAmbient, probeGeo, probeHardware } from '@/core/watcher';
+import type { Geo, Hardware } from '@/core/watcher';
 import TouchControls from './TouchControls';
 
 // 結局的「被監視」低語:把使用者自己的環境訊號即時織進去。
 // 全部只回顯給他本人 —— 詭異感來自「它怎麼會知道」,而不是資料真的被偷走。
 function buildWatchLines(
   a: ReturnType<typeof gatherAmbient>,
-  geo: { city: string | null; country: string | null },
+  geo: Geo,
+  hw: Hardware,
   path: number[],
 ): string[] {
   const lines: string[] = [];
   lines.push('你以為,只有你一個人醒著。');
   if (geo.city) lines.push(`而${geo.city}${geo.country ? `,${geo.country}` : ''}的這一夜,我也在。`);
   lines.push(`${a.os}・${a.browser}。這面 ${a.screen} 的玻璃,我從裡面看你,很久了。`);
+  lines.push(`你的簽名是 ${a.fingerprint}。換分頁、開無痕、關掉再回來 —— 都還是這一串。我認得。`);
+  if ((hw.cameras ?? 0) + (hw.mics ?? 0) > 0)
+    lines.push(`你這台機器接了 ${hw.cameras ?? 0} 個鏡頭、${hw.mics ?? 0} 支麥克風。它們,現在醒著嗎。`);
+  if (hw.batteryPct != null)
+    lines.push(
+      hw.charging
+        ? `你正把自己接上牆 —— 充電中,${hw.batteryPct}%。`
+        : `你的電,只剩 ${hw.batteryPct}%。撐得到夢醒嗎。`,
+    );
+  if (a.network) lines.push(`你透過 ${a.network} 連上來。訊號,我收得很清楚。`);
   lines.push(
     path.length
       ? `你推開了 ${path.length} 道門 —— ${encodePath(path)}。每一道,都是我為你開的。`
@@ -124,9 +136,9 @@ export default function Hud() {
     let reveal: ReturnType<typeof setInterval> | undefined;
     const ambient = gatherAmbient();
     const path = useStore.getState().path;
-    probeGeo().then((geo) => {
+    Promise.all([probeGeo(), probeHardware()]).then(([geo, hw]) => {
       if (cancelled) return;
-      const lines = buildWatchLines(ambient, geo, path);
+      const lines = buildWatchLines(ambient, geo, hw, path);
       setWatchLines(lines);
       setWatchShown(1);
       reveal = setInterval(() => {

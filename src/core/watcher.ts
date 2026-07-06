@@ -20,12 +20,21 @@ export type Ambient = {
   screen: string; // 2560×1440
   win: string; // 1440×900
   cores: number | null;
+  network: string | null; // Wi-Fi(4G) 之類
+  fingerprint: string; // 裝置指紋簽章 XXXX-XXXX
   referrerHost: string | null;
   visitCount: number; // 本機第幾次抵達結局(含這次)
   firstSeen: string | null; // 本機第一次抵達結局的日期
 };
 
 export type Geo = { city: string | null; region: string | null; country: string | null };
+
+export type Hardware = {
+  cameras: number | null; // 接了幾個攝影機(免權限只拿得到數量)
+  mics: number | null; // 接了幾支麥克風
+  batteryPct: number | null; // 電量 %
+  charging: boolean | null; // 是否充電中
+};
 
 const WEEK = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
 
@@ -64,6 +73,91 @@ function parseBrowser(ua: string): string {
 function langName(tag: string): string {
   const t = tag.toLowerCase();
   return LANG_NAMES[t] ?? LANG_NAMES[t.split('-')[0]] ?? tag;
+}
+
+// 網路型態:Wi-Fi / 行動網路 + 速度分級。navigator.connection 非標準,拿不到就回 null。
+function networkLabel(): string | null {
+  const c = (navigator as unknown as { connection?: { effectiveType?: string; type?: string } })
+    .connection;
+  if (!c) return null;
+  const speed: Record<string, string> = { '4g': '4G', '3g': '3G', '2g': '2G', 'slow-2g': '龜速 2G' };
+  const kind: Record<string, string> = {
+    wifi: 'Wi-Fi',
+    cellular: '行動網路',
+    ethernet: '有線',
+    none: '離線',
+  };
+  const et = c.effectiveType ? speed[c.effectiveType] ?? c.effectiveType : null;
+  const ty = c.type ? kind[c.type] : null;
+  if (ty && et) return `${ty}(${et})`;
+  return ty ?? et;
+}
+
+// 32-bit FNV-1a
+function hashStr(s: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16).padStart(8, '0');
+}
+
+function canvasTrait(): string {
+  try {
+    const c = document.createElement('canvas');
+    c.width = 240;
+    c.height = 60;
+    const ctx = c.getContext('2d');
+    if (!ctx) return '';
+    ctx.textBaseline = 'top';
+    ctx.font = "16px 'Arial'";
+    ctx.fillStyle = '#f60';
+    ctx.fillRect(0, 0, 120, 30);
+    ctx.fillStyle = '#069';
+    ctx.fillText('疊池 superpool ✨', 2, 15);
+    ctx.fillStyle = 'rgba(102,204,0,0.7)';
+    ctx.fillText('疊池 superpool ✨', 4, 17);
+    return c.toDataURL();
+  } catch {
+    return '';
+  }
+}
+
+function webglTrait(): string {
+  try {
+    const c = document.createElement('canvas');
+    const gl = (c.getContext('webgl') ||
+      c.getContext('experimental-webgl')) as WebGLRenderingContext | null;
+    if (!gl) return '';
+    const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+    const vendor = dbg ? gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL) : '';
+    const renderer = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : '';
+    return `${vendor}~${renderer}`;
+  } catch {
+    return '';
+  }
+}
+
+// 裝置指紋:硬體 + 瀏覽器特徵混成一枚穩定簽章。
+// 換分頁、開無痕、清 localStorage 都不變 —— 因為它算的是「這台機器」,不是任何登入身分。
+function computeFingerprint(): string {
+  const nav = navigator as unknown as { deviceMemory?: number };
+  const traits = [
+    navigator.userAgent,
+    navigator.language,
+    (navigator.languages || []).join(','),
+    `${screen.width}x${screen.height}x${screen.colorDepth}`,
+    new Date().getTimezoneOffset(),
+    Intl.DateTimeFormat().resolvedOptions().timeZone,
+    navigator.hardwareConcurrency,
+    nav.deviceMemory ?? '',
+    navigator.maxTouchPoints,
+    webglTrait(),
+    canvasTrait(),
+  ].join('|');
+  const h = hashStr(traits);
+  return `${h.slice(0, 4)}-${h.slice(4, 8)}`.toUpperCase();
 }
 
 const VISIT_KEY = 'sp.watch.visits';
@@ -107,10 +201,43 @@ export function gatherAmbient(): Ambient {
     screen: `${window.screen.width}×${window.screen.height}`,
     win: `${window.innerWidth}×${window.innerHeight}`,
     cores: typeof navigator.hardwareConcurrency === 'number' ? navigator.hardwareConcurrency : null,
+    network: networkLabel(),
+    fingerprint: computeFingerprint(),
     referrerHost,
     visitCount,
     firstSeen,
   };
+}
+
+/** 非同步硬體探針:接了幾個鏡頭/麥克風(免權限只拿數量)+ 電量/充電狀態。 */
+export async function probeHardware(): Promise<Hardware> {
+  const out: Hardware = { cameras: null, mics: null, batteryPct: null, charging: null };
+  try {
+    if (navigator.mediaDevices?.enumerateDevices) {
+      const devs = await navigator.mediaDevices.enumerateDevices();
+      out.cameras = devs.filter((d) => d.kind === 'videoinput').length;
+      out.mics = devs.filter((d) => d.kind === 'audioinput').length;
+    }
+  } catch {
+    // enumerateDevices 被封鎖 —— 靜默
+  }
+  try {
+    const getBattery = (
+      navigator as unknown as {
+        getBattery?: () => Promise<{ level: number; charging: boolean }>;
+      }
+    ).getBattery;
+    if (typeof getBattery === 'function') {
+      const bat = await getBattery.call(navigator);
+      if (bat) {
+        out.batteryPct = Math.round((bat.level ?? 0) * 100);
+        out.charging = !!bat.charging;
+      }
+    }
+  } catch {
+    // 部分瀏覽器已移除 Battery API —— 靜默
+  }
+  return out;
 }
 
 /** 可選的粗略地理定位:向免費 IP 服務問城市。失敗(離線 / 被擋 / 逾時)就回全 null。 */
