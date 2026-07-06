@@ -22,34 +22,48 @@ function buildWatchLines(
   path: number[],
 ): string[] {
   const lines: string[] = [];
-  lines.push('你以為,只有你一個人醒著。');
-  if (geo.city) lines.push(`而${geo.city}${geo.country ? `,${geo.country}` : ''}的這一夜,我也在。`);
-  lines.push(`${a.os}・${a.browser}。這面 ${a.screen} 的玻璃,我從裡面看你,很久了。`);
-  lines.push(`你的簽名是 ${a.fingerprint}。換分頁、開無痕、關掉再回來 —— 都還是這一串。我認得。`);
+  lines.push('別急著眨眼 —— 我看你,已經很久了。久到你以為,這不過是一場夢。');
+  if (geo.city)
+    lines.push(
+      `${geo.city}${geo.country ? `,${geo.country}` : ''}此刻也是深夜吧。你窗外那盞燈的明滅,我一次都沒漏掉。`,
+    );
+  lines.push(
+    `你正貼著這面 ${a.screen} 的玻璃,${a.os}・${a.browser} 的微光把你的臉照得好清楚。而我,就在玻璃的另一面。`,
+  );
+  lines.push(
+    `我早在你身上按了記號 —— ${a.fingerprint} —— 那是洗不掉的。就算換一副面孔、躲進無痕裡回來,我一眼就認得你。`,
+  );
   if ((hw.cameras ?? 0) + (hw.mics ?? 0) > 0)
-    lines.push(`你這台機器接了 ${hw.cameras ?? 0} 個鏡頭、${hw.mics ?? 0} 支麥克風。它們,現在醒著嗎。`);
+    lines.push(
+      `你身邊那 ${hw.cameras ?? 0} 隻眼睛、${hw.mics ?? 0} 張耳朵,都是我留下的。它們,從不闔上。`,
+    );
   if (hw.batteryPct != null)
     lines.push(
       hw.charging
-        ? `你正把自己接上牆 —— 充電中,${hw.batteryPct}%。`
-        : `你的電,只剩 ${hw.batteryPct}%。撐得到夢醒嗎。`,
+        ? `你把自己接上了牆,以為能撐得久一點。${hw.batteryPct}% —— 而牆的另一頭,連著我。`
+        : `你只剩 ${hw.batteryPct}% 了。等它歸零、燈全熄的那一刻,我才會真正靠近。`,
     );
-  if (a.network) lines.push(`你透過 ${a.network} 連上來。訊號,我收得很清楚。`);
+  if (a.network)
+    lines.push(`你以為那條 ${a.network} 的線,只通向外面。它其實,一直通向我。`);
   lines.push(
     path.length
-      ? `你推開了 ${path.length} 道門 —— ${encodePath(path)}。每一道,都是我為你開的。`
-      : '你一道門也沒推。你只是站著,任我看著。',
+      ? `你推開的那 ${path.length} 道門 —— ${encodePath(path)} —— 沒有一道是出口。每一道後面站著的,都是我。`
+      : '你一道門也沒推。你只是站著,任我繞著你,一圈,又一圈。',
   );
   lines.push(
     a.visitCount > 1
-      ? `第 ${a.visitCount} 次了。你總是回到這座池子。`
-      : '第一次來。從現在起,我記住你了。',
+      ? `第 ${a.visitCount} 次了。你每回都說不再來,可你還是聞得到這裡的水味,對吧。`
+      : '第一次來。別擔心 —— 你不會是最後一次。我,很有耐心。',
   );
   lines.push(
-    a.referrerHost ? `你從 ${a.referrerHost} 來到這裡。` : '沒有人帶你來。門,是你自己找到的。',
+    a.referrerHost
+      ? `你從 ${a.referrerHost} 一路被引到這裡,還以為是自己走進來的。`
+      : '沒有人帶你來。是我,在你的夢裡留了一扇門。',
   );
-  lines.push(`${a.tz}・你說${a.lang}。這些,我都抄下來了。`);
-  lines.push('所以 —— 是你夢見了這座池,還是池,一直夢著你?');
+  lines.push(`你說${a.lang},在 ${a.tz} 的黑裡。連你睡著前呢喃的那個名字,我都記進了冊子。`);
+  lines.push(
+    '所以 —— 究竟是你夢見了這座池,還是這座池,一直養著你這場夢?別醒。你一醒,我就再也看不見你了。',
+  );
   return lines;
 }
 
