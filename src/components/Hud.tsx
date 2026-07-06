@@ -34,9 +34,7 @@ function buildWatchLines(
     `我早在你身上按了記號 —— ${a.fingerprint} —— 那是洗不掉的。就算換一副面孔、躲進無痕裡回來,我一眼就認得你。`,
   );
   if ((hw.cameras ?? 0) + (hw.mics ?? 0) > 0)
-    lines.push(
-      `你身邊那 ${hw.cameras ?? 0} 隻眼睛、${hw.mics ?? 0} 張耳朵,都是我留下的。它們,從不闔上。`,
-    );
+    lines.push(`你這台機器接了 ${hw.cameras ?? 0} 個鏡頭、${hw.mics ?? 0} 支麥克風。它們,現在醒著嗎。`);
   if (hw.batteryPct != null)
     lines.push(
       hw.charging
@@ -62,7 +60,7 @@ function buildWatchLines(
   );
   lines.push(`你說${a.lang},在 ${a.tz} 的黑裡。連你睡著前呢喃的那個名字,我都記進了冊子。`);
   lines.push(
-    '所以 —— 究竟是你夢見了這座池,還是這座池,一直養著你這場夢?別醒。你一醒,我就再也看不見你了。',
+    '我知道你是誰,也知道你做過些什麼 —— 全都記著。所以究竟是你夢見了這座池,還是這座池,一直養著你這場夢?別醒;你一醒,我就再也看不見你了。',
   );
   return lines;
 }
@@ -316,7 +314,7 @@ export default function Hud() {
                     key={i}
                     className="watch-line"
                     style={{
-                      fontSize: 16,
+                      fontSize: 14,
                       letterSpacing: 3,
                       lineHeight: 1.9,
                       textAlign: 'center',
