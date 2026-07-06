@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import { useEffect, useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { useStore, ROOT_BRANCH } from '@/core/store';
-import { generateRoomSpec, type Archetype } from '@/core/room';
+import { generateRoomSpec, doorAnchor, type Archetype } from '@/core/room';
 import { mirrorSeed, clamp01, hashCombine } from '@/core/prng';
 import { detectQuality } from '@/core/quality';
 import {
@@ -91,11 +91,14 @@ export default function Experience() {
   useEffect(() => {
     if (!started || phase !== 'play') return;
     setDoorVoices(
-      spec.doors.map((d) => ({
-        x: d.x,
-        z: -spec.depth / 2,
-        t: clamp01((d.dDelta + 0.07) / 0.22),
-      })),
+      spec.doors.map((d) => {
+        const a = doorAnchor(spec, d);
+        return {
+          x: a.x,
+          z: a.z,
+          t: clamp01((d.dDelta + 0.07) / 0.22),
+        };
+      }),
     );
     setFigureState(!!spec.figure, false);
     setUnderwater(spec.floodLevel != null);

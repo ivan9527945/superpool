@@ -259,7 +259,7 @@ export function DoorGroup({
   const W = 1.24;
   const H = 2.3;
   return (
-    <group position={[d.x, 0, 0]}>
+    <group>
       {/* 玄關側壁/頂 */}
       <Tiled map={mosaic} w={DEEP} h={H} color={pal.wallTile} tile={0.9}
         position={[-W / 2, H / 2, DEEP / 2]} rotation={[0, Math.PI / 2, 0]} />
@@ -293,6 +293,53 @@ export function DoorGroup({
           color={d.cue}
         />
       )}
+    </group>
+  );
+}
+
+/** 隔間牆:室內的實體薄牆(下磚裙 + 上粉刷 + 頂收邊),逼你繞行 */
+export function Partition({
+  b,
+  height,
+  pal,
+  mosaic,
+}: {
+  b: { x: number; z: number; w: number; d: number };
+  height: number;
+  pal: Palette;
+  mosaic: THREE.Texture;
+}) {
+  const alongZ = b.d > b.w; // 沿 z 走的牆
+  const len = alongZ ? b.d : b.w;
+  const rotY = alongZ ? Math.PI / 2 : 0;
+  const ws = Math.min(1.5, height);
+  const map = useMemo(() => {
+    const t = mosaic.clone();
+    t.repeat.set(len / 0.9, ws / 0.9);
+    t.needsUpdate = true;
+    return t;
+  }, [mosaic, len, ws]);
+  const upper = height - ws;
+  return (
+    <group position={[b.x, 0, b.z]} rotation={[0, rotY, 0]}>
+      {/* 實心量體(兩面皆可見) */}
+      <mesh position={[0, height / 2, 0]}>
+        <boxGeometry args={[len, height, Math.min(b.w, b.d)]} />
+        <meshStandardMaterial color={pal.plaster} roughness={0.85} />
+      </mesh>
+      {/* 兩面磁磚裙牆 */}
+      {[1, -1].map((s) => (
+        <mesh key={s} position={[0, ws / 2, (s * Math.min(b.w, b.d)) / 2 + s * 0.006]}
+          rotation={[0, s < 0 ? Math.PI : 0, 0]}>
+          <planeGeometry args={[len, ws]} />
+          <meshStandardMaterial map={map} color={pal.wallTile} roughness={0.4} />
+        </mesh>
+      ))}
+      {/* 頂收邊 */}
+      <mesh position={[0, height - 0.05, 0]}>
+        <boxGeometry args={[len + 0.08, 0.1, Math.min(b.w, b.d) + 0.08]} />
+        <meshStandardMaterial color={pal.wallTile} roughness={0.35} />
+      </mesh>
     </group>
   );
 }

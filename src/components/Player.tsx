@@ -9,7 +9,7 @@ import { useEffect, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useStore } from '@/core/store';
 import { pulseTraverse, updateListener, setFigureState } from '@/core/audio';
-import { spawnPoint, type RoomSpec } from '@/core/room';
+import { spawnPoint, doorAnchor, type RoomSpec } from '@/core/room';
 import { touchAxis } from '@/core/input';
 
 const EYE = 1.6;
@@ -136,20 +136,20 @@ export default function Player({ spec }: { spec: RoomSpec }) {
     let nx = THREE.MathUtils.clamp(p.x + dx, -spec.width / 2 + m, spec.width / 2 - m);
     let nz = THREE.MathUtils.clamp(p.z + dz, -spec.depth / 2 + m, spec.depth / 2 - m);
 
-    // 水域是障礙物:分軸解算,可沿邊滑行(淹水室例外 — 你就在水裡)
+    // 障礙物:分軸解算,可沿邊滑行。
+    // 水域淹水室不擋(你就在水裡),但隔間牆永遠擋。
     const e = 0.34;
+    const solids = flooded ? spec.barriers : [...spec.water, ...spec.barriers];
     const blocked = (x: number, z: number) =>
-      spec.water.some(
+      solids.some(
         (wr) =>
           x > wr.x - wr.w / 2 - e &&
           x < wr.x + wr.w / 2 + e &&
           z > wr.z - wr.d / 2 - e &&
           z < wr.z + wr.d / 2 + e,
       );
-    if (!flooded) {
-      if (blocked(nx, p.z)) nx = p.x;
-      if (blocked(nx, nz)) nz = p.z;
-    }
+    if (blocked(nx, p.z)) nx = p.x;
+    if (blocked(nx, nz)) nz = p.z;
     p.x = nx;
     p.z = nz;
 
@@ -194,10 +194,28 @@ export default function Player({ spec }: { spec: RoomSpec }) {
       }
     }
 
-    // 門的觸發:走到遠牆上的門口 = 穿進新的分支(結局階段不再有門)
+    // 門的觸發:走到任一面牆上的門口 = 穿進新的分支(結局階段不再有門)
     if (useStore.getState().phase !== 'play') return;
+    const TW = 0.62; // 貼牆距離
+    const TR = 0.72; // 沿牆的門口半寬
     for (const d of spec.doors) {
-      if (p.z < -spec.depth / 2 + 0.62 && Math.abs(p.x - d.x) < 0.72) {
+      const a = doorAnchor(spec, d);
+      let at = false;
+      switch (d.wall) {
+        case 'north':
+          at = p.z < -spec.depth / 2 + TW && Math.abs(p.x - a.x) < TR;
+          break;
+        case 'south':
+          at = p.z > spec.depth / 2 - TW && Math.abs(p.x - a.x) < TR;
+          break;
+        case 'east':
+          at = p.x > spec.width / 2 - TW && Math.abs(p.z - a.z) < TR;
+          break;
+        case 'west':
+          at = p.x < -spec.width / 2 + TW && Math.abs(p.z - a.z) < TR;
+          break;
+      }
+      if (at) {
         pulseTraverse();
         useStore.getState().traverse(d.index, d.dDelta);
         break;

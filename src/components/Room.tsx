@@ -5,7 +5,7 @@
 
 import * as THREE from 'three';
 import { useEffect, useMemo, useRef } from 'react';
-import type { RoomSpec } from '@/core/room';
+import { doorAnchor, type RoomSpec } from '@/core/room';
 import {
   makeMosaicTexture,
   makeTileTexture,
@@ -18,6 +18,7 @@ import {
   Skylight,
   WindowStrip,
   DoorGroup,
+  Partition,
   ArchWall,
   Railing,
   Ladder,
@@ -253,12 +254,20 @@ export default function Room({
         </group>
       ))}
 
-      {/* ── 門(遠牆上的玄關們) */}
-      <group position={[0, 0, -depth / 2]}>
-        {spec.doors.map((d) => (
-          <DoorGroup key={d.index} d={d} pal={pal} mosaic={mosaic} lit={lit} />
-        ))}
-      </group>
+      {/* ── 隔間牆(逼你繞行、轉彎) */}
+      {spec.barriers.map((b, i) => (
+        <Partition key={i} b={b} height={height} pal={pal} mosaic={mosaic} />
+      ))}
+
+      {/* ── 門(散落四面牆的玄關們) */}
+      {spec.doors.map((d) => {
+        const a = doorAnchor(spec, d);
+        return (
+          <group key={d.index} position={[a.x, 0, a.z]} rotation={[0, a.rotY, 0]}>
+            <DoorGroup d={d} pal={pal} mosaic={mosaic} lit={lit} />
+          </group>
+        );
+      })}
 
       {/* ── 不該有的門 */}
       {spec.fakeDoors.map((f, i) => (

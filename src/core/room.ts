@@ -18,9 +18,14 @@ export interface WaterRect {
   d: number;
 }
 
+export type DoorWall = 'north' | 'south' | 'east' | 'west';
+
 export interface DoorSpec {
   index: number;
-  x: number;
+  /** 門所在的牆:門散落四面,不再全擠在遠牆 */
+  wall: DoorWall;
+  /** 沿牆的座標(north/south 用 x、east/west 用 z) */
+  along: number;
   dDelta: number;
   cue: string;
 }
@@ -97,6 +102,8 @@ export interface RoomSpec {
   canalHalf: number;
   niches: NicheSpec[];
   skylights: SkylightSpec[];
+  /** 隔間牆:室內的實體薄牆,逼你轉彎繞行(碰撞同水域) */
+  barriers: WaterRect[];
   /** 高窗所在的側牆(null = 無窗) */
   windowWall: 'east' | 'west' | null;
   /** 磚裙牆高度(以上是粉刷牆) */
@@ -315,25 +322,48 @@ export function generateRoomSpec(
     }
   }
 
-  // ── 門:2–3 道,在遠牆上(arcade 的門在兩側走道端)
+  // ── 迷宮 PRNG:格局(門的散落、隔間牆)走獨立的隨機串流,
+  //    完全不動主 rng 的抽取順序 — 所以門的 dDelta 不變,舊的分享連結仍指向同一棵分岔樹。
+  const mrng = mulberry32((seed ^ 0x9e3779b9) >>> 0);
+
+  // ── 門:2–3 道,散落在四面牆的不同位置(逼你轉彎才找得到)
   const doorCount =
     archetype === 'arcade' ? 2 : rng() < 0.5 ? 2 : 3;
-  const spread = (width - 4) / 2;
   const hasCoherent = rng() < 0.7;
   const coherentIdx = Math.floor(rng() * doorCount);
+  // 門要落在的牆(避開南牆出生點正前方的直線);arcade 維持兩側走道端
+  const wallPlan: DoorWall[] =
+    archetype === 'arcade'
+      ? ['north', 'north']
+      : doorCount === 2
+        ? mrng() < 0.5
+          ? ['west', 'north']
+          : ['east', 'north']
+        : ['west', 'north', 'east'];
   const doors: DoorSpec[] = [];
   for (let i = 0; i < doorCount; i++) {
-    let x: number;
-    if (archetype === 'arcade') {
-      const ledgeMid = (canalHalf + width / 2) / 2;
-      x = (i === 0 ? -1 : 1) * ledgeMid + (rng() - 0.5) * 0.4;
-    } else {
-      x = -spread + ((i + 0.5) * 2 * spread) / doorCount + (rng() - 0.5) * 0.6;
-    }
+    const xRoll = rng(); // 保留主串流的抽取(原本是門的 x)
     const coherent = hasCoherent && i === coherentIdx;
     const dDelta = coherent ? -(0.02 + rng() * 0.05) : 0.02 + rng() * 0.14;
-    doors.push({ index: i, x, dDelta, cue: cueColor(dDelta) });
+    const wall = wallPlan[i];
+    let along: number;
+    if (archetype === 'arcade') {
+      const ledgeMid = (canalHalf + width / 2) / 2;
+      along = (i === 0 ? -1 : 1) * ledgeMid + (xRoll - 0.5) * 0.4;
+    } else if (wall === 'north' || wall === 'south') {
+      // 遠牆的門推向側邊,不擺正中央 — 出生點看不到直達路線
+      const side = xRoll < 0.5 ? -1 : 1;
+      along = side * (width * 0.22 + mrng() * (width * 0.24));
+    } else {
+      // 側牆的門落在遠半場(北半),得先深入再轉彎
+      along = -depth / 2 + 2.5 + mrng() * (depth * 0.42);
+    }
+    doors.push({ index: i, wall, along, dDelta, cue: cueColor(dDelta) });
   }
+
+  // ── 隔間牆:逼你繞行。開闊原型(storage/flooded)織成蛇形隔間;
+  //    有中央水體的原型(poolhall/arcade/corridor)放幾道獨立屏風,繞過即需轉身。
+  const barriers = buildBarriers(mrng, archetype, width, depth, water, doors);
 
   // ── 不該有的門(封閉原型高 D)
   const fakeDoors: FakeDoorSpec[] = [];
@@ -465,6 +495,7 @@ export function generateRoomSpec(
     basinDepth,
     arches,
     canalHalf,
+    barriers,
     niches,
     skylights,
     windowWall,
@@ -477,6 +508,99 @@ export function generateRoomSpec(
     figure,
     blend,
   };
+}
+
+/** 一道門在世界座標的位置與朝向(開口朝向房間內) */
+export function doorAnchor(
+  spec: Pick<RoomSpec, 'width' | 'depth'>,
+  d: DoorSpec,
+): { x: number; z: number; rotY: number } {
+  const { width, depth } = spec;
+  switch (d.wall) {
+    case 'north':
+      return { x: d.along, z: -depth / 2, rotY: 0 };
+    case 'south':
+      return { x: d.along, z: depth / 2, rotY: Math.PI };
+    case 'east':
+      return { x: width / 2, z: d.along, rotY: -Math.PI / 2 };
+    case 'west':
+      return { x: -width / 2, z: d.along, rotY: Math.PI / 2 };
+  }
+}
+
+/** AABB 重疊(含邊界寬容) */
+function rectsOverlap(a: WaterRect, b: WaterRect, m = 0): boolean {
+  return (
+    Math.abs(a.x - b.x) < (a.w + b.w) / 2 + m &&
+    Math.abs(a.z - b.z) < (a.d + b.d) / 2 + m
+  );
+}
+
+/** 隔間牆生成:開闊原型織蛇形、水體原型放獨立屏風;皆保證有通路、不封死。 */
+function buildBarriers(
+  mrng: () => number,
+  archetype: Archetype,
+  width: number,
+  depth: number,
+  water: WaterRect[],
+  doors: DoorSpec[],
+): WaterRect[] {
+  const T = 0.3; // 牆厚
+  const bars: WaterRect[] = [];
+  const spawnZ = depth / 2 - 1.7;
+
+  // 門口前方的淨空區(別讓隔間牆擋死門)
+  const doorZones: WaterRect[] = doors.map((d) => {
+    const a = doorAnchor({ width, depth }, d);
+    // 沿著門的內側方向留一塊淨空
+    if (d.wall === 'north') return { x: a.x, z: a.z + 1.6, w: 2.4, d: 3.2 };
+    if (d.wall === 'south') return { x: a.x, z: a.z - 1.6, w: 2.4, d: 3.2 };
+    if (d.wall === 'east') return { x: a.x - 1.6, z: a.z, w: 3.2, d: 2.4 };
+    return { x: a.x + 1.6, z: a.z, w: 3.2, d: 2.4 };
+  });
+
+  const clear = (r: WaterRect) => {
+    if (r.z > spawnZ - 2.4) return false; // 出生帶淨空
+    if (water.some((w) => rectsOverlap(r, w, 0.5))) return false;
+    if (doorZones.some((z) => rectsOverlap(r, z, 0.2))) return false;
+    return true;
+  };
+
+  if (archetype === 'storage' || archetype === 'flooded') {
+    // 蛇形隔間:每帶一道貼側牆的牆,缺口在對側,左右交替 → 得來回穿梭
+    const bands = 3;
+    for (let b = 0; b < bands; b++) {
+      const cz = -depth / 2 + ((b + 1) * depth) / (bands + 1);
+      if (cz > spawnZ - 2.4) continue;
+      const side = b % 2 === 0 ? -1 : 1; // 貼哪面側牆
+      const gap = 2.0 + mrng() * 0.8; // 對側留的缺口
+      const wallX = (side * width) / 2;
+      const innerEdge = -side * (width / 2 - gap);
+      const len = Math.abs(wallX - innerEdge);
+      const cx = (wallX + innerEdge) / 2;
+      const r = { x: cx, z: cz, w: len, d: T };
+      if (water.some((w) => rectsOverlap(r, w, 0.3))) continue;
+      if (doorZones.some((z) => rectsOverlap(r, z, 0.2))) continue;
+      bars.push(r);
+    }
+  } else {
+    // 獨立屏風:短牆,兩端皆可繞;交錯擺放逼你轉身
+    const target = archetype === 'corridor' ? 3 : 2;
+    let tries = 0;
+    while (bars.length < target && tries < 20) {
+      tries++;
+      const cz = -depth * 0.34 + mrng() * depth * 0.6;
+      const cx = (mrng() - 0.5) * width * 0.55;
+      const alongZ = mrng() < 0.5;
+      const r: WaterRect = alongZ
+        ? { x: cx, z: cz, w: T, d: 1.4 + mrng() * 1.8 }
+        : { x: cx, z: cz, w: 1.8 + mrng() * 2.0, d: T };
+      if (!clear(r)) continue;
+      if (bars.some((o) => rectsOverlap(r, o, 0.6))) continue;
+      bars.push(r);
+    }
+  }
+  return bars;
 }
 
 /** 每個房間的出生點(靠近南牆,面向門) */
