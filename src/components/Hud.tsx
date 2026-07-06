@@ -7,9 +7,39 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '@/core/store';
 import { startAudio } from '@/core/audio';
-import { shareUrl } from '@/core/branch';
+import { shareUrl, encodePath } from '@/core/branch';
 import { detectQuality } from '@/core/quality';
+import { gatherAmbient, probeGeo } from '@/core/watcher';
 import TouchControls from './TouchControls';
+
+// 結局的「被監視」低語:把使用者自己的環境訊號即時織進去。
+// 全部只回顯給他本人 —— 詭異感來自「它怎麼會知道」,而不是資料真的被偷走。
+function buildWatchLines(
+  a: ReturnType<typeof gatherAmbient>,
+  geo: { city: string | null; country: string | null },
+  path: number[],
+): string[] {
+  const lines: string[] = [];
+  lines.push('你以為,只有你一個人醒著。');
+  if (geo.city) lines.push(`而${geo.city}${geo.country ? `,${geo.country}` : ''}的這一夜,我也在。`);
+  lines.push(`${a.os}・${a.browser}。這面 ${a.screen} 的玻璃,我從裡面看你,很久了。`);
+  lines.push(
+    path.length
+      ? `你推開了 ${path.length} 道門 —— ${encodePath(path)}。每一道,都是我為你開的。`
+      : '你一道門也沒推。你只是站著,任我看著。',
+  );
+  lines.push(
+    a.visitCount > 1
+      ? `第 ${a.visitCount} 次了。你總是回到這座池子。`
+      : '第一次來。從現在起,我記住你了。',
+  );
+  lines.push(
+    a.referrerHost ? `你從 ${a.referrerHost} 來到這裡。` : '沒有人帶你來。門,是你自己找到的。',
+  );
+  lines.push(`${a.tz}・你說${a.lang}。這些,我都抄下來了。`);
+  lines.push('所以 —— 是你夢見了這座池,還是池,一直夢著你?');
+  return lines;
+}
 
 // 揭露:D 歸零時,遊戲不說「你回家了」
 const LUCID_LINES = [
@@ -29,6 +59,8 @@ export default function Hud() {
   const [scramble, setScramble] = useState('');
   const [coarse, setCoarse] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [watchLines, setWatchLines] = useState<string[]>([]);
+  const [watchShown, setWatchShown] = useState(0);
 
   // 觸控裝置:顯示虛擬搖桿、換提示文案(UA 或粗指標任一;?touch=1 強制)
   useEffect(() => {
@@ -81,6 +113,38 @@ export default function Hud() {
     }, 110);
     return () => clearInterval(id);
   }, [phase]);
+  // end:抵達結局時,蒐集本機環境訊號 + 可選的 IP 粗定位,逐行浮現「被監視」低語
+  useEffect(() => {
+    if (phase !== 'end') {
+      setWatchLines([]);
+      setWatchShown(0);
+      return;
+    }
+    let cancelled = false;
+    let reveal: ReturnType<typeof setInterval> | undefined;
+    const ambient = gatherAmbient();
+    const path = useStore.getState().path;
+    probeGeo().then((geo) => {
+      if (cancelled) return;
+      const lines = buildWatchLines(ambient, geo, path);
+      setWatchLines(lines);
+      setWatchShown(1);
+      reveal = setInterval(() => {
+        setWatchShown((n) => {
+          if (n >= lines.length) {
+            if (reveal) clearInterval(reveal);
+            return n;
+          }
+          return n + 1;
+        });
+      }, 2100);
+    });
+    return () => {
+      cancelled = true;
+      if (reveal) clearInterval(reveal);
+    };
+  }, [phase]);
+
   const [clock, setClock] = useState('03:33:00');
   const t0 = useRef<number | null>(null);
   const glitching = useRef(false);
@@ -213,25 +277,40 @@ export default function Hud() {
               }}
             >
               <div
-                className="end-quote"
-                style={{ fontSize: 20, letterSpacing: 6, lineHeight: 2.2, textAlign: 'center', padding: '0 24px' }}
+                style={{
+                  maxWidth: 640,
+                  padding: '0 28px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 18,
+                }}
               >
-                不知周之夢為胡蝶與,
-                <br />
-                胡蝶之夢為周與?
+                {watchLines.slice(0, watchShown).map((line, i) => (
+                  <div
+                    key={i}
+                    className="watch-line"
+                    style={{
+                      fontSize: 16,
+                      letterSpacing: 3,
+                      lineHeight: 1.9,
+                      textAlign: 'center',
+                      opacity: i === watchShown - 1 ? 1 : 0.4,
+                      textShadow: '0 0 12px rgba(120,255,220,0.35)',
+                      transition: 'opacity 1.4s ease',
+                    }}
+                  >
+                    {line}
+                  </div>
+                ))}
               </div>
-              <div
-                className="end-quote"
-                style={{ fontSize: 12, letterSpacing: 4, opacity: 0.55, marginTop: 26 }}
-              >
-                —《莊子・齊物論》
-              </div>
-              <div
-                className="end-hint"
-                style={{ fontSize: 11, letterSpacing: 3, opacity: 0.35, marginTop: 70 }}
-              >
-                點擊,再作一次夢
-              </div>
+              {watchShown >= watchLines.length && watchLines.length > 0 && (
+                <div
+                  className="watch-hint"
+                  style={{ fontSize: 11, letterSpacing: 3, marginTop: 70 }}
+                >
+                  點擊,再作一次夢
+                </div>
+              )}
             </div>
           )}
           {phase === 'play' && (

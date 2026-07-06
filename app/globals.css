@@ -74,3 +74,28 @@ canvas {
     opacity: 0.35;
   }
 }
+
+/* 被監視低語:每行從下方浮現、緩緩亮起。
+   不用 forwards —— 進場後回歸 inline opacity,舊行變暗交給 inline transition。 */
+.watch-line {
+  animation: watch-in 1.6s ease;
+}
+
+@keyframes watch-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+    filter: blur(3px);
+  }
+}
+
+.watch-hint {
+  opacity: 0;
+  animation: watch-hint-in 1.8s ease forwards;
+}
+
+@keyframes watch-hint-in {
+  to {
+    opacity: 0.35;
+  }
+}
