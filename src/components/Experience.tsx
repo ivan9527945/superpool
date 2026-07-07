@@ -34,6 +34,7 @@ import Pool from './Pool';
 import Player from './Player';
 import Effects from './Effects';
 import Hud from './Hud';
+import FakeHome from './FakeHome';
 
 /** 進疊加態的分岔度閾值;壓回這以下則觸發「揭露」 */
 const SUPER_D = 0.9;
@@ -203,6 +204,7 @@ export default function Experience() {
         <Effects />
       </Canvas>
       <Hud />
+      {!started && <FakeHome />}
     </div>
   );
 }

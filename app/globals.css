@@ -99,3 +99,39 @@ canvas {
     opacity: 0.35;
   }
 }
+
+/* 跌倒:地板抽掉 —— 先一個踉蹌後仰,再整個往前栽下去、模糊墜落,
+   露出後面那座疊池。z 由高退到 0,墜下時穿過鏡頭。 */
+.fh-root {
+  z-index: 20;
+  transform-origin: 50% 120%;
+  will-change: transform, filter, opacity;
+}
+
+.fh-falling {
+  pointer-events: none;
+  animation: fh-fall 1s cubic-bezier(0.5, 0, 0.85, 1) forwards;
+}
+
+@keyframes fh-fall {
+  0% {
+    transform: perspective(1000px) rotateX(0deg) translateY(0) scale(1);
+    filter: blur(0px) brightness(1);
+    opacity: 1;
+  }
+  12% {
+    transform: perspective(1000px) rotateX(-4deg) translateY(-1.8%) scale(1.02);
+    filter: blur(0px) brightness(1.04);
+    opacity: 1;
+  }
+  22% {
+    transform: perspective(1000px) rotateX(-2deg) translateX(-1.2%) scale(1.03)
+      rotateZ(-1deg);
+  }
+  100% {
+    transform: perspective(1000px) rotateX(46deg) translateY(78%) scale(1.55)
+      rotateZ(2deg);
+    filter: blur(22px) brightness(0.35);
+    opacity: 0;
+  }
+}

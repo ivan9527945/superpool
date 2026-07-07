@@ -6,7 +6,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '@/core/store';
-import { startAudio } from '@/core/audio';
 import { shareUrl, encodePath } from '@/core/branch';
 import { detectQuality } from '@/core/quality';
 import { gatherAmbient, probeGeo, probeHardware } from '@/core/watcher';
@@ -379,36 +378,7 @@ export default function Hud() {
 
           {coarse && phase === 'play' && <TouchControls />}
         </>
-      ) : (
-        <div
-          onClick={() => {
-            startAudio();
-            useStore.getState().start();
-          }}
-          style={{
-            position: 'absolute',
-            inset: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'rgba(0,0,0,0.82)',
-            pointerEvents: 'auto',
-            cursor: 'pointer',
-          }}
-        >
-          <div style={{ fontSize: 44, letterSpacing: 16, paddingLeft: 16 }}>疊池</div>
-          <div style={{ fontSize: 13, letterSpacing: 7, opacity: 0.7, marginTop: 10 }}>
-            SUPERPOOL
-          </div>
-          <div style={{ fontSize: 12, letterSpacing: 3, opacity: 0.6, marginTop: 46 }}>
-            點擊進入 · 建議戴耳機
-          </div>
-          <div style={{ fontSize: 11, letterSpacing: 2, opacity: 0.35, marginTop: 14 }}>
-            水面倒影不是反射。每道門都回不去。
-          </div>
-        </div>
-      )}
+      ) : null}
     </div>
   );
 }

@@ -3,7 +3,8 @@ import './globals.css';
 import ServiceWorker from '@/components/ServiceWorker';
 
 export const metadata: Metadata = {
-  title: '疊池 SUPERPOOL',
+  // 偽裝:頁籤看起來就是一個再普通不過的 Claude 對話分頁。
+  title: 'New chat – Claude',
   description:
     '你 noclip 進的不是某個地方,而是宇宙與宇宙之間的那層膜。每往前一步,就關掉身後一個世界。',
   manifest: '/manifest.webmanifest',
@@ -13,7 +14,7 @@ export const metadata: Metadata = {
     title: '疊池',
   },
   icons: {
-    icon: '/icons/icon-192.png',
+    icon: '/claude-icon.svg',
     apple: '/icons/icon-192.png',
   },
 };
