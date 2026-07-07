@@ -79,6 +79,7 @@ function Pill({ icon, label }: { icon: React.ReactNode; label: string }) {
         color: INK,
         fontSize: 14,
         whiteSpace: 'nowrap',
+        cursor: 'pointer',
       }}
     >
       <span style={{ color: MUTED, display: 'inline-flex' }}>{icon}</span>
@@ -131,7 +132,6 @@ export default function FakeHome() {
         fontFamily:
           '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
         pointerEvents: 'auto',
-        cursor: 'pointer',
         overflow: 'hidden',
       }}
     >
@@ -148,11 +148,23 @@ export default function FakeHome() {
           color: MUTED,
         }}
       >
-        <svg width={22} height={22} viewBox="0 0 24 24" aria-hidden>
+        <svg
+          width={22}
+          height={22}
+          viewBox="0 0 24 24"
+          aria-hidden
+          style={{ cursor: 'pointer' }}
+        >
           <rect x="3" y="4" width="18" height="16" rx="2.5" style={stroke} />
           <line x1="9" y1="4" x2="9" y2="20" style={stroke} />
         </svg>
-        <svg width={22} height={22} viewBox="0 0 24 24" aria-hidden>
+        <svg
+          width={22}
+          height={22}
+          viewBox="0 0 24 24"
+          aria-hidden
+          style={{ cursor: 'pointer' }}
+        >
           <path
             d="M5 20V10a7 7 0 0 1 14 0v10l-2.3-1.6L14.4 20 12 18.4 9.6 20l-2.3-1.6L5 20Z"
             style={stroke}
@@ -197,7 +209,7 @@ export default function FakeHome() {
                 color: '#f2f0e8',
               }}
             >
-              Happy {day}, satoshi
+              Happy {day}
             </h1>
           </div>
 
@@ -211,6 +223,7 @@ export default function FakeHome() {
               borderRadius: 16,
               padding: '18px 18px 14px',
               boxShadow: '0 1px 0 rgba(255,255,255,0.03) inset',
+              cursor: 'pointer',
             }}
           >
             <div style={{ color: MUTED, fontSize: 16, minHeight: 44 }}>
