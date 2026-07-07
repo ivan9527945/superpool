@@ -84,8 +84,12 @@ export default function Player({ spec }: { spec: RoomSpec }) {
   }, [gl]);
 
   useFrame((_, rawDt) => {
-    // spec 尚未跟上 store(剛穿門的那幾幀):先不動,避免重複觸發
-    if (useStore.getState().branchId !== spec.seed) return;
+    // spec 尚未跟上 store(剛穿門的那幾幀):先不動,避免重複觸發門。
+    // 只在遊玩階段做這個同步檢查 —— 結局(super/end)時 Player 用的是疊加態房
+    // superSpecs[0],其 seed 本來就不等於 branchId,若也套這道守衛會每幀 return、
+    // 整個結局連視角都動不了(就是「走到某關不能移動」的成因)。
+    const st = useStore.getState();
+    if (st.phase === 'play' && st.branchId !== spec.seed) return;
 
     if (lastSeed.current !== spec.seed) {
       lastSeed.current = spec.seed;

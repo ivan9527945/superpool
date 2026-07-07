@@ -38,6 +38,8 @@ import FakeHome from './FakeHome';
 
 /** 進疊加態的分岔度閾值;壓回這以下則觸發「揭露」 */
 const SUPER_D = 0.9;
+/** 最後一關:疊加態畫面停留多久後,進入「被監視」資訊畫面 */
+const SUPER_HOLD_MS = 4000;
 const LUCID_D = 0.02;
 
 export default function Experience() {
@@ -129,7 +131,10 @@ export default function Experience() {
       setSuperposition(true);
       setDoorVoices([]);
       setFigureState(true, false);
-      const id = setTimeout(() => useStore.getState().setPhase('end'), 30000);
+      const id = setTimeout(
+        () => useStore.getState().setPhase('end'),
+        SUPER_HOLD_MS,
+      );
       return () => clearTimeout(id);
     }
     if (phase === 'end') resolveEnd();
