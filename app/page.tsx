@@ -2,26 +2,12 @@
 
 import dynamic from 'next/dynamic';
 
-// WebGL / Web Audio 都是純客戶端 — 關掉 SSR
+// WebGL / Web Audio 都是純客戶端 — 關掉 SSR。
+// 不放 loading 畫面:偽裝首頁要無縫出現,底色鋪成跟它一致的深色避免黑閃。
 const Experience = dynamic(() => import('@/components/Experience'), {
   ssr: false,
   loading: () => (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: '#000',
-        color: '#3b5f5a',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontFamily: '"Courier New", monospace',
-        letterSpacing: 4,
-        fontSize: 12,
-      }}
-    >
-      LOADING TAPE…
-    </div>
+    <div style={{ position: 'fixed', inset: 0, background: '#262624' }} />
   ),
 });
 
