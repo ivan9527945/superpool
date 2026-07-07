@@ -1,5 +1,5 @@
-// 產生 PWA 圖示(192 / 512 PNG),無外部依賴 — 手刻 PNG 編碼 + zlib。
-// 設計:池核暗青底、居中泳池、三道漣漪、一道門縫。
+// 產生 PWA / 分享縮圖(192 / 512 PNG),無外部依賴 — 手刻 PNG 編碼 + zlib。
+// 設計:奶油底、居中珊瑚色放射星芒(對外偽裝成一般 AI 對話產品)。
 
 import { deflateSync } from 'node:zlib';
 import { writeFileSync, mkdirSync } from 'node:fs';
@@ -66,47 +66,30 @@ function png(size, draw) {
 
 function draw(set, S) {
   const c = S / 2;
-  for (let y = 0; y < S; y++) {
-    for (let x = 0; x < S; x++) {
-      // 徑向漸層底(池核暗青)
-      const d = Math.hypot(x - c, y - c) / (S * 0.72);
-      const t = Math.min(1, d);
-      set(x, y, Math.round(16 + t * -6), Math.round(41 - t * 14), Math.round(42 - t * 12));
-    }
-  }
-  // 居中泳池(圓角矩形)
-  const pw = S * 0.5;
-  const px0 = c - pw / 2;
-  const py0 = c - pw / 2;
-  const rad = S * 0.06;
-  const inRound = (x, y) => {
-    const ix = Math.max(px0 + rad, Math.min(px0 + pw - rad, x));
-    const iy = Math.max(py0 + rad, Math.min(py0 + pw - rad, y));
-    return Math.hypot(x - ix, y - iy) <= rad;
+  // 奶油底
+  for (let y = 0; y < S; y++)
+    for (let x = 0; x < S; x++) set(x, y, 239, 235, 226);
+
+  // 珊瑚色 12 道放射星芒(圓角):每道從中心往外描一串圓點
+  const R = S * 0.34; // 外半徑
+  const stamp = S * 0.042; // 筆刷半徑
+  const disc = (cx, cy, rr) => {
+    for (let dy = -rr; dy <= rr; dy++)
+      for (let dx = -rr; dx <= rr; dx++)
+        if (dx * dx + dy * dy <= rr * rr) set(cx + dx, cy + dy, 217, 119, 87);
   };
-  for (let y = py0; y < py0 + pw; y++) {
-    for (let x = px0; x < px0 + pw; x++) {
-      if (inRound(x, y)) set(x, y, 40, 118, 108, 235);
+  for (let i = 0; i < 12; i++) {
+    const a = (i * Math.PI) / 6;
+    const ex = Math.cos(a) * R;
+    const ey = Math.sin(a) * R;
+    const steps = Math.ceil(R);
+    for (let s = 0; s <= steps; s++) {
+      const t = s / steps;
+      disc(Math.round(c + ex * t), Math.round(c + ey * t), Math.round(stamp));
     }
   }
-  // 三道漣漪
-  for (let r = 0; r < 3; r++) {
-    const yy = py0 + pw * (0.3 + r * 0.2);
-    const thick = S * 0.012;
-    for (let x = px0 + pw * 0.12; x < px0 + pw * 0.88; x++) {
-      const wob = Math.sin((x - px0) * 0.08 + r * 1.3) * (S * 0.02);
-      const y = yy + wob;
-      for (let th = -thick; th <= thick; th++) {
-        const a = 235 * (1 - Math.abs(th) / (thick + 0.5));
-        set(x, Math.round(y + th), 205, 246, 230, a);
-      }
-    }
-  }
-  // 門縫:泳池下緣一道亮線
-  const dy = py0 + pw - S * 0.022;
-  for (let x = c - pw * 0.15; x < c + pw * 0.15; x++)
-    for (let th = 0; th < Math.max(2, S * 0.008); th++)
-      set(x, dy + th, 150, 250, 224, 240);
+  // 中心稍實
+  disc(c, c, Math.round(S * 0.06));
 }
 
 mkdirSync('public/icons', { recursive: true });

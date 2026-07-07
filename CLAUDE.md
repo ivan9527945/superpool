@@ -63,3 +63,41 @@ Everything hangs off one rule — **`(seed, D) → room` is a pure function** (`
 - **Spawn reset must be inside `useFrame`, not `useEffect`.** `useEffect` runs after paint, so the first frame of a new room can still hold the old (against-the-wall) position and instantly re-trigger a door — chained traversals. `Player.tsx` resets position synchronously when `spec.seed` changes.
 - **Dev HMR is flaky** with this R3F setup — an edit sometimes yields `a[d] is not a function` or a 500. If a page 500s after edits, restart `npm run dev` (and `rm -rf .next/cache` if it persists); it's not your code.
 - **Headless WebGL doesn't work here** (SwiftShader context fails). Dogfood with a real/headed browser.
+
+## 對外偽裝(重要 — 不要在公開表面洩漏真實資訊)
+
+對「拿到分享連結的人」與「看 GitHub 的人」,本專案一律偽裝成一個普通的 Claude 對話網站。真實身分(疊池 / SUPERPOOL、後室、平行宇宙玩法)只寫在**這份 `CLAUDE.md`**,不出現在對外表面:
+
+- **入口畫面** (`FakeHome.tsx`) — 進站先顯示仿 Claude 首頁(「Happy {星期}」+ 輸入框 + 快捷藥丸);點畫面任一處播「跌倒」轉場才進入疊池。
+- **頁籤 / 分享卡** (`app/layout.tsx`) — title `New chat – Claude`、描述與 OG/Twitter 卡皆為 Claude 文案、縮圖是 Claude 珊瑚星芒(`public/icons/icon-*.png`,由 `scripts/gen-icons.mjs` 產生)。進遊戲瞬間 `revealTab()` 才把頁籤換回「疊池 SUPERPOOL」+ 原圖示。
+- **`app/manifest.ts`** — PWA name/description 皆為 Claude。
+- **`README.md`** — 對外的 Claude 說明,**不得**放入下方真實資訊。
+- 尚未處理:Railway 網域字串仍含 `superpool`;要完全隱藏需設自訂網域或改服務名。
+
+改動對外檔案時,務必維持這層偽裝一致(頁籤、OG、manifest、favicon 全部 Claude)。
+
+## 真實專案資訊(原 README,對外已隱藏)
+
+### 專案理念
+
+一款以《後室》(The Backrooms)為根、探討平行宇宙的 3D 網頁類遊戲體驗。你 noclip 進的不是「某個地方的很多層」,而是**宇宙與宇宙之間的那層膜**;每往前一步,就關掉身後一個世界。
+
+在經典《後室》裡,恐怖來自「熟悉但錯位的場所」。本作把母題嫁接到**平行宇宙**:你穿過的每一個房間,都是同一個房間在無數現實裡的一個版本;往前走細節悄悄變動,而水面倒影是一個「幾乎正確、卻微妙錯誤」的平行分支。池核(poolcore)是主機制——水的倒影天生就是平行世界的視覺隱喻。越往深處走,遊戲越在問一個莊子式的問題:「家」是否存在過,還是只是你起步時分岔最低的那個分支?結局不給「你回家了」——把分岔度壓到近零時,揭露的是這只是又一個分支,「原初的家」從不存在,以《齊物論》胡蝶夢作結。恐怖來自「不對勁的持續累積」,不是突發巨響。
+
+### 五根設計支柱
+
+1. **倒影即平行宇宙** — 水面倒影永遠 render 一個**不同 seed** 的分支,而非反射現實。全作 signature。
+2. **不可逆的分岔** — 門只把你帶進新分支,永遠回不到出發的宇宙。每一步都關掉一個世界。
+3. **可讀線索的選擇** — 讀微小線索、決定靠近哪道門。把「走廊漫遊」變成「遊戲」的核心迴圈。
+4. **檔案感(found-footage)** — 1990 年代、VHS 顆粒、掃描線、色差、REC 時間戳(一個不存在的日期)。
+5. **聲音即導航** — 嗡鳴走音、殘響、房間音隨分岔度變化。用耳朵判斷離家多遠。
+
+### 五種空間原型
+
+- **poolhall 泳池廳** — 天窗、高窗、扶梯、滑水道。「家」永遠是這個。
+- **arcade 拱廊水道** — 連續拱牆跨過水道,錯綜縱深。
+- **flooded 淹水室** — 整室在水中,慣性漂浮、悶音、牆面焦散光網。
+- **storage 儲藏間** — 低天花板、成堆泳池椅、地面積水映倒影。
+- **corridor 濕區廊道** — 窄長、排水槽、壁龕、假門。
+
+線上體驗建議戴耳機——聲音就是導航。技術棧:Next.js 15(App Router)· React Three Fiber · TypeScript · Zustand · Web Audio API · PWA。設計全文見 `plan`。

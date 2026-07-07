@@ -2,10 +2,10 @@ import type { MetadataRoute } from 'next';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: '疊池 SUPERPOOL',
-    short_name: '疊池',
+    name: 'Claude',
+    short_name: 'Claude',
     description:
-      '你 noclip 進的不是某個地方,而是宇宙與宇宙之間的那層膜。每往前一步,就關掉身後一個世界。',
+      'Claude is a next-generation AI assistant built by Anthropic to be helpful, honest, and harmless.',
     start_url: '.',
     display: 'fullscreen',
     orientation: 'landscape',
