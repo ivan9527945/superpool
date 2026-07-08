@@ -60,15 +60,16 @@ export default function Room({
     });
   }, [ghost, spec]);
 
+  // 後室 Level 0 黃:基底就是黃的(不等 blend),D 越高越髒越暗
   const pal: Palette = useMemo(
     () => ({
-      wallTile: new THREE.Color('#eef6f1').lerp(new THREE.Color('#d4c07c'), blend),
-      plaster: new THREE.Color('#f3f1e9').lerp(new THREE.Color('#cdb977'), blend),
-      floor: new THREE.Color('#dfeae5').lerp(new THREE.Color('#b8a76d'), blend),
-      basin: new THREE.Color('#c2e2da').lerp(new THREE.Color('#a89a62'), blend),
-      ceil: new THREE.Color('#e6eae3').lerp(new THREE.Color('#93865c'), blend),
-      lightOn: new THREE.Color('#fff4da').lerp(new THREE.Color('#ffd54f'), blend * 0.6),
-      amb: new THREE.Color('#cfe4e2').lerp(new THREE.Color('#b39e55'), blend),
+      wallTile: new THREE.Color('#d6c887').lerp(new THREE.Color('#a8925a'), blend),
+      plaster: new THREE.Color('#ddd092').lerp(new THREE.Color('#b09a55'), blend),
+      floor: new THREE.Color('#c9ba76').lerp(new THREE.Color('#96854e'), blend),
+      basin: new THREE.Color('#c3bd80').lerp(new THREE.Color('#8f854f'), blend),
+      ceil: new THREE.Color('#cfc37e').lerp(new THREE.Color('#8d7f4e'), blend),
+      lightOn: new THREE.Color('#fff3c9').lerp(new THREE.Color('#ffd54f'), blend * 0.6),
+      amb: new THREE.Color('#ded08d').lerp(new THREE.Color('#9c8b4d'), blend),
     }),
     [blend],
   );
@@ -88,13 +89,13 @@ export default function Room({
         <>
           <ambientLight
             intensity={(bright ? 0.52 : flooded ? 0.55 : 0.48) - blend * 0.25}
-            color={flooded ? new THREE.Color('#9fd2d8') : pal.amb}
+            color={flooded ? new THREE.Color('#a4bd7a') : pal.amb}
           />
           {bright && (
             <hemisphereLight
               intensity={0.28 - blend * 0.15}
-              color="#eaf6f2"
-              groundColor="#8fa39c"
+              color="#f4ecc8"
+              groundColor="#9c8d55"
             />
           )}
         </>
@@ -146,19 +147,19 @@ export default function Room({
             <>
               <mesh position={[w0.x, 0.035, w0.z - w0.d / 2 - 0.17]}>
                 <boxGeometry args={[w0.w + 0.68, 0.07, 0.34]} />
-                <meshStandardMaterial color="#f4f7f3" roughness={0.3} />
+                <meshStandardMaterial color="#e9e2c0" roughness={0.3} />
               </mesh>
               <mesh position={[w0.x, 0.035, w0.z + w0.d / 2 + 0.17]}>
                 <boxGeometry args={[w0.w + 0.68, 0.07, 0.34]} />
-                <meshStandardMaterial color="#f4f7f3" roughness={0.3} />
+                <meshStandardMaterial color="#e9e2c0" roughness={0.3} />
               </mesh>
               <mesh position={[w0.x - w0.w / 2 - 0.17, 0.035, w0.z]}>
                 <boxGeometry args={[0.34, 0.07, w0.d]} />
-                <meshStandardMaterial color="#f4f7f3" roughness={0.3} />
+                <meshStandardMaterial color="#e9e2c0" roughness={0.3} />
               </mesh>
               <mesh position={[w0.x + w0.w / 2 + 0.17, 0.035, w0.z]}>
                 <boxGeometry args={[0.34, 0.07, w0.d]} />
-                <meshStandardMaterial color="#f4f7f3" roughness={0.3} />
+                <meshStandardMaterial color="#e9e2c0" roughness={0.3} />
               </mesh>
             </>
           )}

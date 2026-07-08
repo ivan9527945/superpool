@@ -124,10 +124,11 @@ export function Fixture({
   return (
     <group position={[l.x, 0, l.z]}>
       <mesh position={[0, height - 0.05, 0]}>
-        <boxGeometry args={[1.25, 0.09, 0.48]} />
+        {/* 方形嵌板(後室 Level 0 的天花板燈格) */}
+        <boxGeometry args={[1.15, 0.09, 0.92]} />
         <meshStandardMaterial
           ref={mat}
-          color={l.on ? '#eceadb' : '#2b2f2a'}
+          color={l.on ? '#f2ecd2' : '#2f2c20'}
           emissive={l.on ? color : BLACK}
           emissiveIntensity={l.on ? 1.5 : 0}
         />

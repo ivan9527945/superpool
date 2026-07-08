@@ -92,8 +92,51 @@ function draw(set, S) {
   disc(c, c, Math.round(S * 0.06));
 }
 
+// 後室 favicon(進遊戲後 revealTab 換上):黃牆、天花板暗帶、
+// 發光的日光燈嵌板 + 底下的光暈、一根柱影 — 32px 下讀起來就是「那個黃房間」。
+function drawBackrooms(set, S) {
+  const wall = [205, 187, 114];
+  const ceil = [138, 124, 74];
+  const floor = [158, 142, 86];
+  const pillar = [174, 157, 92];
+  // 牆
+  for (let y = 0; y < S; y++)
+    for (let x = 0; x < S; x++) set(x, y, ...wall);
+  // 天花板與地板暗帶
+  for (let y = 0; y < S * 0.2; y++)
+    for (let x = 0; x < S; x++) set(x, y, ...ceil);
+  for (let y = Math.floor(S * 0.84); y < S; y++)
+    for (let x = 0; x < S; x++) set(x, y, ...floor);
+  // 柱影(偏右,從天花板落到地板)
+  for (let y = Math.floor(S * 0.2); y < S * 0.84; y++)
+    for (let x = Math.floor(S * 0.62); x < S * 0.8; x++)
+      set(x, y, ...pillar);
+  // 日光燈嵌板(天花板帶中央)+ 往下的光暈
+  const lx0 = S * 0.28;
+  const lx1 = S * 0.72;
+  const ly0 = S * 0.05;
+  const ly1 = S * 0.17;
+  for (let y = ly0; y < ly1; y++)
+    for (let x = lx0; x < lx1; x++) set(x, y, 255, 249, 221);
+  const glowH = S * 0.5;
+  for (let y = ly1; y < ly1 + glowH; y++) {
+    const t = 1 - (y - ly1) / glowH; // 越往下越淡
+    const a = Math.round(90 * t * t);
+    const spread = (1 - t) * S * 0.1;
+    for (let x = lx0 - spread; x < lx1 + spread; x++)
+      set(x, y, 255, 246, 205, a);
+  }
+}
+
 mkdirSync('public/icons', { recursive: true });
 for (const size of [192, 512]) {
   writeFileSync(`public/icons/icon-${size}.png`, png(size, draw));
   console.log(`public/icons/icon-${size}.png`);
+}
+for (const size of [64, 192]) {
+  writeFileSync(
+    `public/icons/backrooms-${size}.png`,
+    png(size, drawBackrooms),
+  );
+  console.log(`public/icons/backrooms-${size}.png`);
 }

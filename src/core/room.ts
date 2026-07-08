@@ -169,51 +169,52 @@ export function generateRoomSpec(
   let canalHalf = 0;
 
   if (archetype === 'poolhall') {
-    width = 13 + rng() * 6;
-    depth = 18 + rng() * 9;
-    height = 4.6 + rng() * 1.8;
+    width = 26 + rng() * 12;
+    depth = 42 + rng() * 18;
+    height = 4.4 + rng() * 1.2; // 壓低:大廳失去挑高,壓迫感從「家」就開始
     const pool = { x: 0, z: -depth * 0.05, w: width * 0.5, d: depth * 0.42 };
     water.push(pool);
     mirrorWater = { ...pool, y: -0.35 };
   } else if (archetype === 'arcade') {
-    width = 10 + rng() * 4.5;
-    depth = 22 + rng() * 8;
-    height = 4.8 + rng() * 1.4;
+    width = 18 + rng() * 9;
+    depth = 48 + rng() * 18;
+    height = 4.2 + rng() * 1.0;
     canalHalf = width * (0.2 + rng() * 0.06);
     const canal = { x: 0, z: 0, w: canalHalf * 2, d: depth - 3 };
     water.push(canal);
     mirrorWater = { ...canal, y: -0.3 };
     basinDepth = 1.1;
-    const archCount = Math.max(3, Math.floor(depth / 4.6));
+    // 密集列柱拱廊:拱牆數隨更長的水道倍增(每 ~2.8m 一道)
+    const archCount = Math.max(7, Math.floor(depth / 2.8));
     for (let i = 1; i <= archCount; i++) {
       arches.push(-depth / 2 + (i * depth) / (archCount + 1) + (rng() - 0.5) * 0.5);
     }
   } else if (archetype === 'flooded') {
-    width = 9 + rng() * 5;
-    depth = 14 + rng() * 8;
-    height = 4.2 + rng() * 1.4;
+    width = 20 + rng() * 10;
+    depth = 34 + rng() * 16;
+    height = 4.4 + rng() * 1.2;
     floodLevel = height * (0.62 + rng() * 0.16);
     basinDepth = 0;
   } else if (archetype === 'storage') {
-    width = 8 + rng() * 5;
-    depth = 12 + rng() * 8;
-    height = 2.7 + rng() * 0.7;
-    // 地面積水:乾房間裡的平行宇宙之窗
-    const px = (rng() - 0.5) * width * 0.4;
-    const pz = (rng() - 0.5) * depth * 0.4;
+    width = 18 + rng() * 10;
+    depth = 30 + rng() * 18;
+    height = 2.55 + rng() * 0.55; // 幾乎貼頭頂(門高 2.3、視線 1.6)— 儲藏間的身分
+    // 地面積水:乾房間裡的平行宇宙之窗(隨更大的地面放大)
+    const px = (rng() - 0.5) * width * 0.5;
+    const pz = (rng() - 0.5) * depth * 0.5;
     mirrorWater = {
       x: px,
       z: pz,
-      w: 1.6 + rng() * 2.2,
-      d: 1.2 + rng() * 1.8,
+      w: 2.4 + rng() * 3,
+      d: 1.8 + rng() * 2.4,
       y: 0.012,
     };
     basinDepth = 0;
   } else {
-    // corridor
-    width = 6.8 + rng() * 3;
-    depth = 22 + rng() * 8;
-    height = 3.1 + rng() * 0.9;
+    // corridor — 保留「窄長」身分:寬增幅較小、更深更長
+    width = 10.5 + rng() * 4.5;
+    depth = 55 + rng() * 20;
+    height = 3.1 + rng() * 0.7;
     const side = rng() < 0.5 ? -1 : 1;
     const drain = {
       x: side * width * 0.12,
@@ -232,7 +233,7 @@ export function generateRoomSpec(
   const skyRoll = rng();
   const winRoll = rng();
   if (archetype === 'poolhall' || archetype === 'arcade') {
-    const n = archetype === 'poolhall' ? 2 + Math.floor(skyRoll * 2) : 3;
+    const n = archetype === 'poolhall' ? 3 + Math.floor(skyRoll * 3) : 5;
     for (let i = 0; i < n; i++) {
       skylights.push({
         x: (rng() - 0.5) * width * 0.4,
@@ -285,14 +286,14 @@ export function generateRoomSpec(
   const tiltAmt = D > 0.45 ? (D - 0.45) * 1.6 : 0;
   if (archetype === 'poolhall') {
     const colX = water[0].w / 2 + 1.3;
-    const rows = Math.max(2, Math.floor(water[0].d / 4.2));
+    const rows = Math.max(3, Math.floor(water[0].d / 3.6));
     for (let j = 0; j < rows; j++) {
       const z = water[0].z - water[0].d / 2 + ((j + 0.5) * water[0].d) / rows;
       columns.push({ x: -colX, z, tilt: (rng() - 0.5) * 0.16 * tiltAmt });
       columns.push({ x: colX, z, tilt: (rng() - 0.5) * 0.16 * tiltAmt });
     }
   } else if (archetype === 'corridor' || archetype === 'storage') {
-    const rows = Math.max(2, Math.floor(depth / 6));
+    const rows = Math.max(3, Math.floor(depth / 4.5));
     for (let j = 0; j < rows; j++) {
       const z = -depth / 2 + ((j + 0.5) * depth) / rows;
       columns.push({
@@ -311,7 +312,7 @@ export function generateRoomSpec(
   // ── 壁龕(封閉原型的空間層次)
   const niches: NicheSpec[] = [];
   if (archetype === 'corridor' || archetype === 'storage') {
-    const n = 1 + Math.floor(rng() * 3);
+    const n = 4 + Math.floor(rng() * 8); // 壁龕大增:4–11(原 1–3)
     for (let i = 0; i < n; i++) {
       niches.push({
         wall: rng() < 0.5 ? 'east' : 'west',
@@ -352,8 +353,11 @@ export function generateRoomSpec(
       along = (i === 0 ? -1 : 1) * ledgeMid + (xRoll - 0.5) * 0.4;
     } else if (wall === 'north' || wall === 'south') {
       // 遠牆的門推向側邊,不擺正中央 — 出生點看不到直達路線
+      // (窄房間 clamp 在離側牆 1.5m,門框才不會塞進牆角)
       const side = xRoll < 0.5 ? -1 : 1;
-      along = side * (width * 0.22 + mrng() * (width * 0.24));
+      along =
+        side *
+        Math.min(width * 0.22 + mrng() * (width * 0.24), width / 2 - 1.5);
     } else {
       // 側牆的門落在遠半場(北半),得先深入再轉彎
       along = -depth / 2 + 2.5 + mrng() * (depth * 0.42);
@@ -361,9 +365,8 @@ export function generateRoomSpec(
     doors.push({ index: i, wall, along, dDelta, cue: cueColor(dDelta) });
   }
 
-  // ── 隔間牆:逼你繞行。開闊原型(storage/flooded)織成蛇形隔間;
-  //    有中央水體的原型(poolhall/arcade/corridor)放幾道獨立屏風,繞過即需轉身。
-  const barriers = buildBarriers(mrng, archetype, width, depth, water, doors);
+  // ── 隔間牆:三層格局系統(主結構 + 轉角短牆 + 沿牆壁跺),逼你不斷轉彎。
+  const barriers = buildBarriers(mrng, archetype, width, depth, water, doors, canalHalf);
 
   // ── 不該有的門(封閉原型高 D)
   const fakeDoors: FakeDoorSpec[] = [];
@@ -405,19 +408,23 @@ export function generateRoomSpec(
         rotY: Math.PI / 2,
       });
     }
-    if (propRolls[1] < 0.5) {
+    // 池畔散落多張躺椅(兩側交錯)
+    const chairN = 3 + Math.floor(propRolls[1] * 4); // 3–6
+    for (let i = 0; i < chairN; i++) {
+      const r = (propRolls[i % 6] + i * 0.41) % 1;
+      const r2 = (propRolls[(i + 2) % 6] + i * 0.29) % 1;
       props.push({
         kind: 'chair',
-        x: (propRolls[2] < 0.5 ? -1 : 1) * (width / 2 - 1.3),
-        z: -depth / 2 + 3 + propRolls[3] * (depth - 6),
-        rotY: propRolls[4] * Math.PI * 2,
+        x: (r < 0.5 ? -1 : 1) * (width / 2 - 1.3),
+        z: -depth / 2 + 3 + r2 * (depth - 6),
+        rotY: r * Math.PI * 2,
       });
     }
     if (propRolls[5] < 0.1) {
       props.push({ kind: 'duck', x: pool.x + (propRolls[2] - 0.5) * pool.w * 0.6, z: pool.z + (propRolls[3] - 0.5) * pool.d * 0.6, rotY: propRolls[4] * 6 });
     }
   } else if (archetype === 'storage') {
-    const n = 2 + Math.floor(propRolls[0] * 3);
+    const n = 4 + Math.floor(propRolls[0] * 6); // 4–9(原 2–4)
     for (let i = 0; i < n; i++) {
       const r = (propRolls[i % 6] + i * 0.37) % 1;
       props.push({
@@ -431,28 +438,32 @@ export function generateRoomSpec(
       props.push({ kind: 'duck', x: 0, z: depth * 0.2, rotY: propRolls[1] * 6 });
     }
   } else if (archetype === 'flooded') {
-    // 漂在水面的椅子
-    const n = Math.floor(propRolls[0] * 3);
+    // 漂在水面的椅子(modulo 取值,避免數量增加後索引越界)
+    const n = 2 + Math.floor(propRolls[0] * 4); // 2–5
     for (let i = 0; i < n; i++) {
+      const a = (propRolls[(i + 1) % 6] + i * 0.37) % 1;
+      const b = (propRolls[(i + 2) % 6] + i * 0.23) % 1;
+      const c = propRolls[(i + 3) % 6];
       props.push({
         kind: 'chair',
-        x: (propRolls[i + 1] - 0.5) * width * 0.7,
-        z: (propRolls[i + 2] - 0.5) * depth * 0.7,
-        rotY: propRolls[i + 3] * Math.PI * 2,
+        x: (a - 0.5) * width * 0.7,
+        z: (b - 0.5) * depth * 0.7,
+        rotY: c * Math.PI * 2,
       });
     }
     if (propRolls[5] < 0.15) {
       props.push({ kind: 'duck', x: (propRolls[1] - 0.5) * width * 0.5, z: (propRolls[2] - 0.5) * depth * 0.5, rotY: 0 });
     }
   } else if (archetype === 'corridor') {
-    const n = Math.floor(propRolls[0] * 3);
+    const n = 3 + Math.floor(propRolls[0] * 4); // 3–6(原 0–2)
     const walkSide = water[0] ? -Math.sign(water[0].x) || 1 : 1;
     for (let i = 0; i < n; i++) {
-      const r = propRolls[i + 1];
+      const r = propRolls[(i + 1) % 6];
+      const z = (propRolls[(i + 2) % 6] + i * 0.31) % 1;
       props.push({
         kind: r < 0.55 ? 'bench' : 'locker',
         x: walkSide * (width / 2 - 0.75),
-        z: -depth / 2 + 2 + propRolls[i + 2] * (depth - 4),
+        z: -depth / 2 + 2 + z * (depth - 4),
         rotY: walkSide > 0 ? -Math.PI / 2 : Math.PI / 2,
       });
     }
@@ -536,7 +547,13 @@ function rectsOverlap(a: WaterRect, b: WaterRect, m = 0): boolean {
   );
 }
 
-/** 隔間牆生成:開闊原型織蛇形、水體原型放獨立屏風;皆保證有通路、不封死。 */
+/**
+ * 隔間牆生成:三層格局系統,皆保證有通路、不封死。
+ * 1) 主結構 — storage/flooded 織「側缺口/中缺口交替」的蛇形帶 + 轉角短牆(缺口變成彎);
+ *    poolhall/corridor 放 L/Z 形複合屏風(多段矩形拼成,繞過必須連轉兩次)。
+ * 2) 沿牆壁跺 — 所有原型的側牆長出交錯凸壁,牆面不再是一直線。
+ * 3) arcade 另從水道緣伸出短鰭,逼你在窄走道上蛇行。
+ */
 function buildBarriers(
   mrng: () => number,
   archetype: Archetype,
@@ -544,6 +561,7 @@ function buildBarriers(
   depth: number,
   water: WaterRect[],
   doors: DoorSpec[],
+  canalHalf: number,
 ): WaterRect[] {
   const T = 0.3; // 牆厚
   const bars: WaterRect[] = [];
@@ -553,51 +571,196 @@ function buildBarriers(
   const doorZones: WaterRect[] = doors.map((d) => {
     const a = doorAnchor({ width, depth }, d);
     // 沿著門的內側方向留一塊淨空
-    if (d.wall === 'north') return { x: a.x, z: a.z + 1.6, w: 2.4, d: 3.2 };
-    if (d.wall === 'south') return { x: a.x, z: a.z - 1.6, w: 2.4, d: 3.2 };
-    if (d.wall === 'east') return { x: a.x - 1.6, z: a.z, w: 3.2, d: 2.4 };
-    return { x: a.x + 1.6, z: a.z, w: 3.2, d: 2.4 };
+    if (d.wall === 'north') return { x: a.x, z: a.z + 1.8, w: 2.8, d: 3.6 };
+    if (d.wall === 'south') return { x: a.x, z: a.z - 1.8, w: 2.8, d: 3.6 };
+    if (d.wall === 'east') return { x: a.x - 1.8, z: a.z, w: 3.6, d: 2.8 };
+    return { x: a.x + 1.8, z: a.z, w: 3.6, d: 2.8 };
   });
 
+  // 與水域的淨距:玩家碰撞兩側各脹 0.34,0.5m 的縫實際走不過 —
+  // 牆體貼水會把窄走道(corridor 的排水槽側)整條封死,所以留 1.5 保證可走。
+  // arcade 例外:水道鰭牆刻意貼水,逼你繞牆側(走道另一半永遠留空)。
+  const waterM = archetype === 'arcade' ? 0.5 : 1.5;
   const clear = (r: WaterRect) => {
     if (r.z > spawnZ - 2.4) return false; // 出生帶淨空
-    if (water.some((w) => rectsOverlap(r, w, 0.5))) return false;
+    if (water.some((w) => rectsOverlap(r, w, waterM))) return false;
     if (doorZones.some((z) => rectsOverlap(r, z, 0.2))) return false;
     return true;
   };
+  // 與既有牆體保持 margin;margin 夠大(≥1.4)即保證縫隙可通行(碰撞每側再脹 0.34)
+  const fits = (r: WaterRect, margin: number) =>
+    clear(r) && !bars.some((o) => rectsOverlap(r, o, margin));
 
   if (archetype === 'storage' || archetype === 'flooded') {
-    // 蛇形隔間:每帶一道貼側牆的牆,缺口在對側,左右交替 → 得來回穿梭
-    const bands = 3;
+    // ── 蛇形帶:帶距壓到 ~3m,「側缺口(左右交替)」與「中缺口(兩段牆)」混織
+    //    帶體加厚(0.5–1m)— 不是薄屏風,是實牆量體,視線撞上去就是黃牆
+    const bandT = 0.5 + mrng() * 0.5;
+    const bands = Math.min(16, Math.max(7, Math.floor(depth / 3.0)));
     for (let b = 0; b < bands; b++) {
-      const cz = -depth / 2 + ((b + 1) * depth) / (bands + 1);
+      const cz =
+        -depth / 2 + ((b + 1) * depth) / (bands + 1) + (mrng() - 0.5) * 0.7;
       if (cz > spawnZ - 2.4) continue;
-      const side = b % 2 === 0 ? -1 : 1; // 貼哪面側牆
-      const gap = 2.0 + mrng() * 0.8; // 對側留的缺口
-      const wallX = (side * width) / 2;
-      const innerEdge = -side * (width / 2 - gap);
-      const len = Math.abs(wallX - innerEdge);
-      const cx = (wallX + innerEdge) / 2;
-      const r = { x: cx, z: cz, w: len, d: T };
-      if (water.some((w) => rectsOverlap(r, w, 0.3))) continue;
-      if (doorZones.some((z) => rectsOverlap(r, z, 0.2))) continue;
-      bars.push(r);
+      const gap = 1.9 + mrng() * 0.8;
+      const bandOk = (r: WaterRect) =>
+        !water.some((w) => rectsOverlap(r, w, 0.3)) &&
+        !doorZones.some((z) => rectsOverlap(r, z, 0.2));
+      if (mrng() < 0.6) {
+        // 側缺口帶:缺口貼對側牆,左右交替 → 來回穿梭
+        const side = b % 2 === 0 ? -1 : 1;
+        const wallX = (side * width) / 2;
+        const innerEdge = -side * (width / 2 - gap);
+        const r = { x: (wallX + innerEdge) / 2, z: cz, w: width - gap, d: bandT };
+        if (!bandOk(r)) continue;
+        bars.push(r);
+        // 轉角短牆:從缺口端往北折,直穿變成 L 彎。
+        // 只往北伸 — 北側的帶已生成,靠 ≥1.6 間距檢查保通路;
+        // 往南伸會撞到「還沒生成」的下一道帶(帶不反查短牆),曾實測把缺口封死。
+        if (mrng() < 0.5) {
+          const stubLen = 1.0 + mrng() * 1.2;
+          const stub = {
+            x: innerEdge + (side * T) / 2,
+            z: cz - stubLen / 2,
+            w: T,
+            d: stubLen,
+          };
+          if (
+            bandOk(stub) &&
+            !bars.slice(0, -1).some((o) => rectsOverlap(stub, o, 1.6))
+          )
+            bars.push(stub);
+        }
+      } else {
+        // 中缺口帶:缺口開在中段的隨機位置 → 每帶都要重新找路
+        const gx = (mrng() - 0.5) * (width - gap - 3);
+        const segs = [
+          {
+            x: (-width / 2 + gx - gap / 2) / 2,
+            z: cz,
+            w: gx - gap / 2 + width / 2,
+            d: bandT,
+          },
+          {
+            x: (gx + gap / 2 + width / 2) / 2,
+            z: cz,
+            w: width / 2 - gx - gap / 2,
+            d: bandT,
+          },
+        ].filter((r) => r.w > 0.5);
+        if (!segs.every(bandOk)) continue;
+        bars.push(...segs);
+      }
     }
-  } else {
-    // 獨立屏風:短牆,兩端皆可繞;交錯擺放逼你轉身
-    const target = archetype === 'corridor' ? 3 : 2;
-    let tries = 0;
-    while (bars.length < target && tries < 20) {
-      tries++;
-      const cz = -depth * 0.34 + mrng() * depth * 0.6;
-      const cx = (mrng() - 0.5) * width * 0.55;
-      const alongZ = mrng() < 0.5;
-      const r: WaterRect = alongZ
-        ? { x: cx, z: cz, w: T, d: 1.4 + mrng() * 1.8 }
-        : { x: cx, z: cz, w: 1.8 + mrng() * 2.0, d: T };
-      if (!clear(r)) continue;
-      if (bars.some((o) => rectsOverlap(r, o, 0.6))) continue;
+  } else if (archetype !== 'arcade') {
+    // ── 粗壯柱體量(後室 Level 0 的大方柱):1.4–3.2m 見方的實心塊,
+    //    散佈全場切碎視線 — 每個縫隙後面都還是空間,看不到盡頭
+    const pillarTarget =
+      archetype === 'corridor'
+        ? 5
+        : Math.min(16, Math.max(6, Math.floor((width * depth) / 90)));
+    let pillars = 0;
+    let ptries = 0;
+    while (pillars < pillarTarget && ptries < 160) {
+      ptries++;
+      const r = {
+        x: (mrng() - 0.5) * (width - 4),
+        z: -depth / 2 + 3 + mrng() * (depth - 8),
+        w: 1.4 + mrng() * 1.8,
+        d: 1.4 + mrng() * 1.8,
+      };
+      if (!fits(r, 1.5)) continue;
       bars.push(r);
+      pillars++;
+    }
+
+    // ── L/Z 形複合屏風(poolhall/corridor):主牆 + 端點垂直折臂,繞過必須連轉
+    const target = archetype === 'corridor' ? 7 : 6;
+    let shapes = 0;
+    let tries = 0;
+    while (shapes < target && tries < 90) {
+      tries++;
+      const cz = -depth * 0.36 + mrng() * depth * 0.62;
+      const cx = (mrng() - 0.5) * Math.max(2, width - 3.6) * 0.55; // 離側牆 ≥1.8
+      const alongZ = mrng() < 0.5;
+      const mainLen = 2.0 + mrng() * 2.4;
+      const armLen = 1.2 + mrng() * 1.6;
+      const endSign = mrng() < 0.5 ? -1 : 1;
+      const armDir = mrng() < 0.5 ? -1 : 1;
+      const segs: WaterRect[] = alongZ
+        ? [
+            { x: cx, z: cz, w: T, d: mainLen },
+            {
+              x: cx + armDir * (armLen / 2),
+              z: cz + endSign * (mainLen / 2 - T / 2),
+              w: armLen,
+              d: T,
+            },
+          ]
+        : [
+            { x: cx, z: cz, w: mainLen, d: T },
+            {
+              x: cx + endSign * (mainLen / 2 - T / 2),
+              z: cz + armDir * (armLen / 2),
+              w: T,
+              d: armLen,
+            },
+          ];
+      // 35%:反端再反向折一臂 → Z 形
+      if (mrng() < 0.35) {
+        const arm2 = 1.2 + mrng() * 1.4;
+        segs.push(
+          alongZ
+            ? {
+                x: cx - armDir * (arm2 / 2),
+                z: cz - endSign * (mainLen / 2 - T / 2),
+                w: arm2,
+                d: T,
+              }
+            : {
+                x: cx - endSign * (mainLen / 2 - T / 2),
+                z: cz - armDir * (arm2 / 2),
+                w: T,
+                d: arm2,
+              },
+        );
+      }
+      // 全形段落都要淨空、離既有牆 ≥0.9;任一段不合格就整組放棄
+      if (!segs.every((r) => clear(r))) continue;
+      if (segs.some((r) => bars.some((o) => rectsOverlap(r, o, 0.9)))) continue;
+      bars.push(...segs);
+      shapes++;
+    }
+  }
+
+  // ── 沿牆壁跺:側牆長出交錯凸壁,牆面變曲折(所有原型)
+  const jogEvery = 3.6 + mrng() * 1.4;
+  const jogCount = Math.max(0, Math.floor((depth - 6) / jogEvery));
+  const maxJut =
+    archetype === 'arcade'
+      ? Math.max(0.7, (width / 2 - canalHalf) * 0.5)
+      : archetype === 'corridor'
+        ? width * 0.24
+        : Math.min(1.8, width * 0.16);
+  // 蛇形帶的房型:壁跺離帶要遠(≥1.4)才不會夾死缺口;屏風房型 0.6 即可
+  const jogMargin =
+    archetype === 'storage' || archetype === 'flooded' ? 1.4 : 0.6;
+  for (let i = 0; i < jogCount; i++) {
+    const z = -depth / 2 + 3 + i * jogEvery + (mrng() - 0.5) * 1.4;
+    const side = (i + (mrng() < 0.25 ? 1 : 0)) % 2 === 0 ? -1 : 1; // 大致交替,偶爾同側連跳
+    const jut = Math.min(maxJut, 0.7 + mrng() * 1.1);
+    const len = 1.0 + mrng() * 1.5;
+    const r = { x: side * (width / 2 - jut / 2), z, w: jut, d: len };
+    if (fits(r, jogMargin)) bars.push(r);
+    // arcade:水道緣的短鰭,和壁跺交錯 → 窄走道上蛇行
+    if (archetype === 'arcade' && mrng() < 0.5) {
+      const s2 = mrng() < 0.5 ? -1 : 1;
+      const fin = Math.min(maxJut, 0.6 + mrng() * 0.8);
+      const rf = {
+        x: s2 * (canalHalf + 0.55 + fin / 2),
+        z: z + jogEvery * 0.5,
+        w: fin,
+        d: T,
+      };
+      if (fits(rf, 0.9)) bars.push(rf);
     }
   }
   return bars;

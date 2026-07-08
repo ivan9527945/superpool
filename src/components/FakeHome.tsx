@@ -14,18 +14,18 @@ const MUTED = '#98958b';
 const BG = '#262624';
 const CARD = '#30302e';
 
-/** 跌進遊戲的瞬間:把偽裝的 Claude 頁籤換回疊池真身(標題 + favicon)。
+/** 跌進遊戲的瞬間:把偽裝的 Claude 頁籤換成「後室」真身(標題 + favicon)。
  *  換 favicon 用「移除舊 link、插新 link」最保險 —— 只改 href 有些瀏覽器不重抓。 */
 function revealTab() {
   if (typeof document === 'undefined') return;
-  document.title = '疊池 SUPERPOOL';
+  document.title = '後室';
   document
     .querySelectorAll('link[rel~="icon"]')
     .forEach((l) => l.remove());
   const link = document.createElement('link');
   link.rel = 'icon';
   link.type = 'image/png';
-  link.href = '/icons/icon-192.png';
+  link.href = '/icons/backrooms-64.png';
   document.head.appendChild(link);
 }
 

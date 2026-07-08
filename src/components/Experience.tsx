@@ -5,10 +5,16 @@
 // 霧色/背景/音訊全部即時綁 D。
 
 import * as THREE from 'three';
-import { useEffect, useMemo } from 'react';
-import { Canvas } from '@react-three/fiber';
+import { useEffect, useLayoutEffect, useMemo } from 'react';
+import { Canvas, useThree } from '@react-three/fiber';
 import { useStore, ROOT_BRANCH } from '@/core/store';
-import { generateRoomSpec, doorAnchor, type Archetype } from '@/core/room';
+import {
+  generateRoomSpec,
+  doorAnchor,
+  spawnPoint,
+  type Archetype,
+  type RoomSpec,
+} from '@/core/room';
 import { mirrorSeed, clamp01, hashCombine } from '@/core/prng';
 import { detectQuality } from '@/core/quality';
 import {
@@ -21,13 +27,14 @@ import {
   pulseTraverse,
 } from '@/core/audio';
 
-/** 各原型的霧氛圍(亮水域開闊、封閉空間壓縮、淹水室濃稠) */
+/** 各原型的霧氛圍:一律黃調,遠平面壓在房間深度之內 —
+ *  遠牆永遠溶在與牆同色的黃霧裡,空間看不到盡頭(後室 Level 0 的感覺) */
 const FOG: Record<Archetype, { base: string; near: number; far: number }> = {
-  poolhall: { base: '#cfe6e0', near: 6, far: 46 },
-  arcade: { base: '#d8ece6', near: 8, far: 50 },
-  flooded: { base: '#175059', near: 0.5, far: 11 },
-  storage: { base: '#9fada6', near: 3, far: 26 },
-  corridor: { base: '#7f9a95', near: 2.2, far: 24 },
+  poolhall: { base: '#c8bb72', near: 4, far: 26 },
+  arcade: { base: '#cec172', near: 5, far: 28 },
+  flooded: { base: '#31421f', near: 0.5, far: 10 },
+  storage: { base: '#8e8149', near: 2.4, far: 17 },
+  corridor: { base: '#7a6f40', near: 2, far: 16 },
 };
 import Room from './Room';
 import Pool from './Pool';
@@ -35,6 +42,21 @@ import Player from './Player';
 import Effects from './Effects';
 import Hud from './Hud';
 import FakeHome from './FakeHome';
+
+/** started 前的相機:同步擺到出生點的第一人稱視角。
+ *  Canvas 預設相機懸在泳池上方,而 Player 要等跌倒動畫結束才掛載 —
+ *  沒有這個,轉場露出 canvas 的那段會先看到一幀「泳池空拍」再跳到出生點。 */
+function SpawnCamera({ spec, active }: { spec: RoomSpec; active: boolean }) {
+  const { camera } = useThree();
+  useLayoutEffect(() => {
+    if (!active) return;
+    const sp = spawnPoint(spec);
+    camera.rotation.order = 'YXZ';
+    camera.rotation.set(0, 0, 0); // 面向北,與 Player 的初始 yaw/pitch 一致
+    camera.position.set(sp.x, 1.6, sp.z); // 1.6 = Player 的 EYE 高度
+  }, [active, spec, camera]);
+  return null;
+}
 
 /** 進疊加態的分岔度閾值;壓回這以下則觸發「揭露」 */
 const SUPER_D = 0.9;
@@ -206,6 +228,7 @@ export default function Experience() {
             {started && <Player spec={spec} />}
           </>
         )}
+        <SpawnCamera spec={spec} active={!started} />
         <Effects />
       </Canvas>
       <Hud />
